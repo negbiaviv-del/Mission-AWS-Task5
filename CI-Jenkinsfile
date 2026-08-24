@@ -1,0 +1,139 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    component: ci-agent
+spec:
+  serviceAccountName: jenkins # ודא שזה ה-SA שיש לו הרשאות ECR (IRSA) או הרשאות בסיסיות
+  containers:
+  - name: docker
+    image: docker:24.0.5-dind
+    securityContext:
+      privileged: true
+    tty: true
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
+  - name: tools
+    image: hashicorp/terraform:1.5
+    command:
+    - cat
+    tty: true
+  - name: python
+    image: python:3.11-slim
+    command:
+    - cat
+    tty: true
+  - name: trivy
+    image: aquasec/trivy:latest
+    command:
+    - cat
+    tty: true
+'''
+        }
+    }
+
+    environment {
+        ECR_REGISTRY = "544471418394.dkr.ecr.us-east-1.amazonaws.com"
+        AWS_REGION = "us-east-1"
+        IMAGE_TAG = "${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : env.BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Lint & Validate') {
+            parallel {
+                stage('Terraform') {
+                    steps {
+                        container('tools') {
+                            dir('Terraform') {
+                                sh '''
+                                terraform fmt -check
+                                terraform init -backend=false
+                                terraform validate
+                                '''
+                            }
+                        }
+                    }
+                }
+                stage('Python & YAML') {
+                    steps {
+                        container('python') {
+                            sh '''
+                            pip install yamllint
+                            python -m py_compile Backend/*.py
+                            python -m py_compile Worker/*.py
+                            yamllint K8S/
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Security Scans (Trivy)') {
+            steps {
+                container('trivy') {
+                    sh 'trivy fs --format table --exit-code 0 --severity CRITICAL,HIGH .'
+                }
+            }
+        }
+
+        stage('Build & Push to ECR') {
+            steps {
+                container('docker') {
+                    // אם אתה משתמש ב-IRSA (IAM Roles for Service Accounts), אפשר להוריד את ה-withCredentials!
+                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                        sh '''
+                        echo "==> Starting Docker Daemon..."
+                        dockerd &
+                        sleep 10
+
+                        echo "==> Installing AWS CLI..."
+                        apk add --no-cache aws-cli
+
+                        echo "==> Logging into AWS ECR..."
+                        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+
+                        echo "==> Building Images..."
+                        docker build -t $ECR_REGISTRY/mission-backend:$IMAGE_TAG ./Backend
+                        docker build -t $ECR_REGISTRY/mission-frontend:$IMAGE_TAG ./Frontend
+                        docker build -t $ECR_REGISTRY/mission-worker:$IMAGE_TAG ./Worker
+
+                        echo "==> Pushing Images to ECR..."
+                        docker push $ECR_REGISTRY/mission-backend:$IMAGE_TAG
+                        docker push $ECR_REGISTRY/mission-frontend:$IMAGE_TAG
+                        docker push $ECR_REGISTRY/mission-worker:$IMAGE_TAG
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Publish Metadata') {
+            steps {
+                echo "Successfully built and pushed images with tag: ${IMAGE_TAG}"
+                writeFile file: 'image_tag.txt', text: "${IMAGE_TAG}"
+                archiveArtifacts artifacts: 'image_tag.txt'
+            }
+        }
+
+        stage('Trigger CD') {
+            steps {
+                echo "Triggering CD Pipeline with IMAGE_TAG: ${IMAGE_TAG}"
+                build job: 'application-cd', parameters: [
+                    string(name: 'IMAGE_TAG', value: "${IMAGE_TAG}")
+                ], wait: false
+            }
+        }
+    }
+}

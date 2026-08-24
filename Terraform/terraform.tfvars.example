@@ -1,0 +1,8 @@
+ami_id             = "ami-0c101f26f147fa7fd" 
+instance_type      = "t2.micro"
+key_name           = "your-key-name"
+master_db_password = "YOUR_SECURE_PASSWORD"
+db_name            = "missiondb"
+db_user            = "dbadmin"
+bucket_name        = "your-unique-bucket-name"
+my_alert_email     = "your-email@example.com"

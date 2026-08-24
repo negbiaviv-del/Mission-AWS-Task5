@@ -1,0 +1,17 @@
+---
+- name: Run Health Checks on Web Servers
+  hosts: web
+  gather_facts: no
+
+  tasks:
+    - name: Check if the website is up and returning HTTP 200 OK
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}"
+        return_content: yes
+      delegate_to: localhost  # <--- זו השורה שפותרת את בעיית הניתוב
+      register: web_response
+      failed_when: web_response.status != 200
+
+    - name: Print Success Message
+      ansible.builtin.debug:
+        msg: "✅ SUCCESS: The web server at {{ ansible_host }} is up and running perfectly!"

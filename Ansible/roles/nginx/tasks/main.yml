@@ -1,0 +1,17 @@
+---
+- name: Install Nginx
+  yum:
+    name: nginx
+    state: present
+
+- name: Deploy main Nginx configuration
+  template:
+    src: reverse-proxy.conf.j2
+    dest: /etc/nginx/nginx.conf
+  notify: restart nginx
+
+- name: Ensure Nginx is running and enabled
+  systemd:
+    name: nginx
+    state: started
+    enabled: yes

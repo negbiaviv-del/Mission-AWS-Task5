@@ -1,0 +1,70 @@
+---
+- name: Install Docker
+  yum:
+    name: docker
+    state: present
+
+- name: Start Docker service
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Add ec2-user to docker group
+  user:
+    name: ec2-user
+    groups: docker
+    append: yes
+
+- name: Create app directory
+  file:
+    path: /var/app
+    state: directory
+    owner: ec2-user
+    mode: '0755'
+
+- name: Copy backend application code
+  copy:
+    src: "{{ playbook_dir }}/../../Backend/"
+    dest: /var/app/
+    owner: ec2-user
+
+- name: Deploy .env file
+  template:
+    src: env.j2
+    dest: /var/app/.env
+    mode: '0600'
+
+- name: Build Docker image
+  shell: |
+    cd /var/app
+    sudo docker build -t my-app-backend .
+
+# ========================================================
+# המשימות המפוצלות: רצות בהתאם למשתנה server_type
+# ========================================================
+
+# המשימה הזו תרוץ *רק* בשרת ה-Backend
+- name: Run application container (Backend API)
+  docker_container:
+    name: backend-app
+    image: my-app-backend
+    state: started
+    recreate: yes        
+    restart_policy: always
+    published_ports:
+      - "5000:5000"  
+    env_file: /var/app/.env
+  when: server_type == "backend"
+
+# המשימה הזו תרוץ *רק* בשרת ה-Worker
+- name: Run worker container (SQS Listener)
+  docker_container:
+    name: worker-app
+    image: my-app-backend
+    command: python worker.py
+    state: started
+    recreate: yes        
+    restart_policy: always
+    env_file: /var/app/.env
+  when: server_type == "worker"

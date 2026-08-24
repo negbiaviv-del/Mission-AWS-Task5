@@ -1,0 +1,85 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: devops-app
+  labels:
+    app: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      serviceAccountName: backend-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      initContainers:
+        - name: init-home
+          image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-backend:latest
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+          command: ["/bin/sh", "-c"]
+          args:
+            - >
+              mkdir -p /tmp/newhome/.postgresql &&
+              cp /home/appuser/.postgresql/* /tmp/newhome/.postgresql/ 2>/dev/null || true &&
+              chown -R 1000:1000 /tmp/newhome &&
+              chmod 600 /tmp/newhome/.postgresql/* 2>/dev/null || true
+          volumeMounts:
+            - name: new-home-vol
+              mountPath: /tmp/newhome
+      containers:
+        - name: backend
+          image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: HOME
+              value: "/tmp/newhome"
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: db-app-secrets
+            - secretRef:
+                name: flask-secret
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          volumeMounts:
+            - name: new-home-vol
+              mountPath: /tmp/newhome
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+      volumes:
+        - name: new-home-vol
+          emptyDir: {}

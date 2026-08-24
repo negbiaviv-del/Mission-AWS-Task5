@@ -1,0 +1,33 @@
+# Logs & Cache
+*.log
+logs/
+__pycache__/
+.bash_history
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+*.tfvars
+secrets.auto.tfvars
+*.plan
+
+# Ansible (Legacy)
+ansible/inventory.ini
+inventory.ini
+*.retry
+
+# SSH Keys, Secrets & Environment
+*.pem
+*.key
+.env
+secrets.env
+secrets.yml
+
+# OS / Editor Files
+.DS_Store
+.vscode/
+
+# K8S
+secret.yaml

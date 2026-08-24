@@ -1,0 +1,26 @@
+---
+- name: 1. Terraform Init
+  ansible.builtin.command: terraform init
+  args:
+    chdir: "{{ tf_dir }}"
+
+- name: 2. Terraform Plan
+  ansible.builtin.command: terraform plan -var-file="terraform-dev.tfvars"
+  args:
+    chdir: "{{ tf_dir }}"
+  register: tf_plan_output
+
+- name: Show Terraform Plan Output
+  ansible.builtin.debug:
+    msg: "{{ tf_plan_output.stdout }}"
+
+- name: Ask for Apply Approval (Pause)
+  ansible.builtin.pause:
+    prompt: "Do you want to APPLY the Terraform plan? Type 'yes' to continue, or anything else to abort"
+  register: apply_approval
+
+- name: 3. Terraform Apply
+  ansible.builtin.command: terraform apply -var-file="terraform-dev.tfvars" -auto-approve
+  args:
+    chdir: "{{ tf_dir }}"
+  when: apply_approval.user_input | lower == 'yes'

@@ -1,0 +1,117 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    component: cd-agent
+spec:
+  serviceAccountName: jenkins
+  containers:
+  - name: kubectl
+    image: hashicorp/terraform:1.5
+    command:
+    - cat
+    tty: true
+'''
+        }
+    }
+
+    parameters {
+        string(name: 'IMAGE_TAG', defaultValue: '', description: 'The unique image tag to deploy (e.g., commit SHA or build number)')
+    }
+
+    environment {
+        NAMESPACE = "devops-app"
+    }
+
+    stages {
+        stage('Input Validation') {
+            steps {
+                script {
+                    if (!params.IMAGE_TAG || params.IMAGE_TAG == 'latest') {
+                        error "Invalid IMAGE_TAG parameter. You must provide a specific tag, 'latest' is not allowed."
+                    }
+                    echo "Starting deployment for version: ${params.IMAGE_TAG}"
+                }
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Setup Kubectl') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                    if ! command -v kubectl &> /dev/null; then
+                        echo "Installing kubectl..."
+                        apk add --no-cache curl
+                        curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
+                        chmod +x kubectl
+                        mv kubectl /usr/local/bin/kubectl
+                    fi
+                    kubectl version --client
+                    '''
+                }
+            }
+        }
+
+        stage('Update Manifests') {
+            steps {
+                container('kubectl') {
+                    sh """
+                    sed -i "s/mission-backend:latest/mission-backend:${params.IMAGE_TAG}/g" K8S/backend/deployment.yaml
+                    sed -i "s/mission-frontend:latest/mission-frontend:${params.IMAGE_TAG}/g" K8S/frontend/deployment.yaml
+                    sed -i "s/mission-worker:latest/mission-worker:${params.IMAGE_TAG}/g" K8S/worker/deployment.yaml
+                    """
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                    kubectl apply -f K8S/backend/
+                    kubectl apply -f K8S/frontend/
+                    kubectl apply -f K8S/worker/
+                    '''
+                }
+            }
+        }
+
+        stage('Verify & Rollout') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                    kubectl rollout status deployment/backend -n ${NAMESPACE} --timeout=180s
+                    kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=180s
+                    kubectl rollout status deployment/worker -n ${NAMESPACE} --timeout=180s
+                    '''
+                }
+            }
+        }
+
+        stage('Smoke Test') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                    echo "==> Running functional connectivity test using a temporary debug pod..."
+                    kubectl run smoke-test-pod --rm -i --restart=Never \
+                        --namespace=${NAMESPACE} \
+                        --image=curlimages/curl:latest \
+                        --command -- curl -s --max-time 10 http://backend-service.${NAMESPACE}.svc.cluster.local:5000/health
+
+                    echo "==> Smoke test completed successfully!"
+                    '''
+                }
+            }
+        }
+    }
+}

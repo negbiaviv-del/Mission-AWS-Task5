@@ -1,0 +1,7 @@
+---
+- name: Restart App Service
+  ansible.builtin.systemd:
+    name: aviv-app
+    state: restarted
+    enabled: yes
+    daemon_reload: yes

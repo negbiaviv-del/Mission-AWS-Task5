@@ -1,0 +1,63 @@
+controller:
+  # שימוש ב-ServiceAccount שיצרנו בשלב הקודם
+  serviceAccount:
+    create: false
+    name: jenkins-admin
+    
+  # רשימת הפלאגינים שיותקנו אוטומטית
+  installPlugins:
+    - kubernetes:4.3.0
+    - workflow-aggregator:600.v4a_fb_31b_e0c19
+    - git:5.5.1
+    - configuration-as-code:1850.v87f0b_db_32f91
+    - job-dsl:1.89
+    - credentials-binding:714.v82361b_a_23eb_b_
+    - aws-credentials:238.v3391b_c7f66a_a_
+    - pipeline-stage-view:2.34
+  
+  # הגדרות Jenkins Configuration as Code (JCasC)
+  JCasC:
+    defaultConfig: true
+    configScripts:
+      setup-jenkins: |
+        jenkins:
+          systemMessage: "Jenkins configured automatically by JCasC - DevOps on AWS Project (Mission 4)"
+          # ביטול הרצת Builds על ה-Controller עצמו (דרישת אבטחה)
+          numExecutors: 0
+        
+        # יצירת ה-Jobs שלנו אוטומטית כקוד באמצעות Job DSL
+        jobs:
+          - script: >
+              pipelineJob('ci-application') {
+                  description('CI Pipeline - Builds Docker images and pushes to ECR')
+                  definition {
+                      cpsScm {
+                          scm {
+                              git {
+                                  // === חשוב: נא לעדכן את ה-URL לכתובת הגיט האמיתית שלך ===
+                                  remote { url('https://github.com/YOUR_USERNAME/YOUR_REPO.git') }
+                                  branch('*/main')
+                              }
+                          }
+                          scriptPath('ci-Jenkinsfile')
+                      }
+                  }
+              }
+              pipelineJob('application-cd') {
+                  description('CD Pipeline - Deploys a specific image tag to EKS')
+                  parameters {
+                      stringParam('IMAGE_TAG', '', 'The unique image tag to deploy (e.g., commit SHA)')
+                  }
+                  definition {
+                      cpsScm {
+                          scm {
+                              git {
+                                  // === חשוב: נא לעדכן את ה-URL לכתובת הגיט האמיתית שלך ===
+                                  remote { url('https://github.com/YOUR_USERNAME/YOUR_REPO.git') }
+                                  branch('*/main')
+                              }
+                          }
+                          scriptPath('cd-Jenkinsfile')
+                      }
+                  }
+              }

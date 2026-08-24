@@ -1,0 +1,43 @@
+---
+# ==========================================
+# 0. אתחול והמתנה לחיבור (Smart Wait)
+# ==========================================
+- name: Initialize all servers and wait for SSH
+  hosts: all
+  gather_facts: false  # שונה מ-no ל-false
+  tasks:
+    - name: Wait for SSH to become available
+      wait_for_connection:
+        delay: 10
+        timeout: 300
+
+# ==========================================
+# 1. הגדרת שרת ה-Frontend (Nginx)
+# ==========================================
+- name: Configure Frontend Web Server
+  hosts: frontend
+  become: true  # שונה מ-yes ל-true
+  roles:
+    - nginx
+
+# ==========================================
+# 2. הגדרת שרת ה-Backend (אפליקציית Flask)
+# ==========================================
+- name: Configure Backend Application Server
+  hosts: backend
+  become: true  # שונה מ-yes ל-true
+  roles:
+    - role: app
+      vars:
+        server_type: "backend"
+
+# ==========================================
+# 3. הגדרת שרת ה-Worker (האזנה ל-SQS)
+# ==========================================
+- name: Configure Worker Server
+  hosts: worker
+  become: true  # שונה מ-yes ל-true
+  roles:
+    - role: app
+      vars:
+        server_type: "worker"

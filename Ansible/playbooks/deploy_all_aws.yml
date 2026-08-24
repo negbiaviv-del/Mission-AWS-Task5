@@ -1,0 +1,42 @@
+---
+- name: One-Click Deployment (Terraform + Ansible)
+  hosts: localhost
+  connection: local
+  vars:
+    tf_dir: "/home/negbi/Mission-AWS/Terraform/environments/dev"
+
+  tasks:
+    - name: 1. Run Terraform Infrastructure
+      include_role:
+        name: terraform
+
+    - name: 2. Capture Public IP from Terraform
+      shell: "terraform -chdir={{ tf_dir }} output -raw instance_public_ip"
+      register: server_ip
+
+    - name: 3. Add host to Ansible Memory
+      add_host:
+        name: "{{ server_ip.stdout }}"
+        groups: web
+        ansible_user: ec2-user
+        # שימוש בנתיב מלא למפתח כדי למנוע בעיות הרשאה
+        ansible_ssh_private_key_file: "/home/negbi/Ansible-Project/avivPair-01.pem"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+
+- name: 4. Configure Web Server (Nginx)
+  hosts: web
+  become: yes
+  # --- כאן השינוי הקריטי ---
+  gather_facts: no  # אומר לאנסיבל: "אל תנסה להתחבר עד שאגיד לך"
+  
+  tasks:
+    - name: Wait for server to wake up
+      wait_for_connection:
+        timeout: 90
+
+    - name: 5. Now gather facts manually
+      setup: # עכשיו, אחרי שווידאנו שהחיבור עובד, אוספים מידע מהשרת
+
+    - name: Run Nginx Role
+      include_role:
+        name: nginx

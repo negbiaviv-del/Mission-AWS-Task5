@@ -1,0 +1,102 @@
+controller:
+  serviceAccount:
+    create: false
+    name: jenkins-admin
+
+  persistence:
+    storageClass: "gp2"
+    size: "8Gi"
+
+  containerEnv:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials-secret
+          key: aws_access_key_id
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials-secret
+          key: aws_secret_access_key
+    - name: GITHUB_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: github-credentials-secret
+          key: github_username
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: github-credentials-secret
+          key: github_token
+
+  installPlugins:
+    - kubernetes
+    - workflow-aggregator
+    - git
+    - configuration-as-code
+    - job-dsl
+    - credentials-binding
+    - aws-credentials
+    - pipeline-stage-view
+
+  JCasC:
+    defaultConfig: true
+    configScripts:
+      credentials: |
+        credentials:
+          system:
+            domainCredentials:
+              - credentials:
+                  - aws:
+                      scope: GLOBAL
+                      id: "aws-credentials"
+                      description: "AWS Credentials for ECR"
+                      accessKey: "${AWS_ACCESS_KEY_ID}"
+                      secretKey: "${AWS_SECRET_ACCESS_KEY}"
+                  - usernamePassword:
+                      scope: GLOBAL
+                      id: "github-credentials"
+                      description: "GitHub Credentials for pulling code"
+                      username: "${GITHUB_USERNAME}"
+                      password: "${GITHUB_TOKEN}"
+      setup-jenkins: |
+        jobs:
+          - script: >
+              pipelineJob('ci-application') {
+                  description('CI Pipeline - Builds Docker images and pushes to ECR')
+                  definition {
+                      cpsScm {
+                          scm {
+                              git {
+                                  remote {
+                                      url('https://github.com/negbiaviv-del/Mission-AWS-Task4.git')
+                                      credentials('github-credentials')
+                                  }
+                                  branch('*/main')
+                              }
+                          }
+                          scriptPath('CI-Jenkinsfile')
+                      }
+                  }
+              }
+          - script: >
+              pipelineJob('application-cd') {
+                  description('CD Pipeline - Deploys a specific image tag to EKS')
+                  parameters {
+                      stringParam('IMAGE_TAG', '', 'The unique image tag to deploy')
+                  }
+                  definition {
+                      cpsScm {
+                          scm {
+                              git {
+                                  remote {
+                                      url('https://github.com/negbiaviv-del/Mission-AWS-Task4.git')
+                                      credentials('github-credentials')
+                                  }
+                                  branch('*/main')
+                              }
+                          }
+                          scriptPath('CD-Jenkinsfile')
+                      }
+                  }
+              }

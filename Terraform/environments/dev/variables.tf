@@ -1,0 +1,13 @@
+variable "avd_aws_region" {}
+variable "avd_aws_ec2_ami_id" {}
+variable "avd_aws_ec2_instance_type" {}
+variable "avd_aws_key_name" {}
+variable "avd_aws_vpc_cidr" {}
+variable "avd_aws_public_subnet_cidr" {}
+variable "avd_aws_public_subnet_2_cidr" {}
+variable "avd_aws_s3_bucket_name" {}
+variable "avd_aws_db_name" {}
+variable "avd_aws_db_user" {}
+variable "avd_aws_db_password" {}
+variable "avd_aws_sns_topic_name" {}
+variable "avd_aws_secret_name" {}

@@ -1,0 +1,112 @@
+---
+- name: Deploy AWS EKS Application
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  
+  vars:
+    region: "us-east-1"
+    account_id: "544471418394"
+    ecr_url: "{{ account_id }}.dkr.ecr.{{ region }}.amazonaws.com"
+    namespace: "devops-app"
+    docker_images:
+      - { name: 'my-frontend', dir: 'Frontend' }
+      - { name: 'my-backend', dir: 'Backend' }
+      - { name: 'my-worker', dir: 'Worker' }
+
+  tasks:
+    - name: 1. Login to AWS ECR
+      ansible.builtin.shell: |
+        aws ecr get-login-password --region {{ region }} | docker login --username AWS --password-stdin {{ ecr_url }}
+      changed_when: false
+
+    - name: 2. Initialize Docker Buildx & QEMU for Cross-Compilation
+      ansible.builtin.shell: |
+        docker run --rm --privileged multiarch/qemu-user-static --reset -p yes > /dev/null 2>&1 || true
+        docker buildx create --use --name multiarch-builder 2>/dev/null || docker buildx use multiarch-builder
+        docker buildx inspect --bootstrap > /dev/null 2>&1
+      changed_when: false
+
+    - name: 3. Build Docker images for AWS (Intel/amd64)
+      ansible.builtin.shell: |
+        docker buildx build --platform linux/amd64 --no-cache --load -t {{ item.name }}:v1.0 ./{{ item.dir }}
+      loop: "{{ docker_images }}"
+
+    - name: 4a. Ensure ECR repositories exist
+      ansible.builtin.shell: |
+        aws ecr describe-repositories --repository-names {{ item.name }} --region {{ region }} > /dev/null 2>&1 || \
+        aws ecr create-repository --repository-name {{ item.name }} --image-scanning-configuration scanOnPush=true --region {{ region }}
+      loop: "{{ docker_images }}"
+      changed_when: false
+
+    - name: 4b. Tag and push images to ECR
+      ansible.builtin.shell: |
+        docker tag {{ item.name }}:v1.0 {{ ecr_url }}/{{ item.name }}:v1.0
+        docker push {{ ecr_url }}/{{ item.name }}:v1.0
+      loop: "{{ docker_images }}"
+
+    - name: 5a. Fetch DB outputs from Terraform
+      ansible.builtin.command: terraform output -raw {{ item }}
+      args:
+        chdir: Terraform
+      register: tf_db
+      loop:
+        - db_address
+        - db_user
+        - db_password
+      changed_when: false
+
+    - name: 5b. Fetch dynamic AWS data from Terraform state
+      ansible.builtin.shell: "{{ item }}"
+      args:
+        chdir: Terraform
+      register: tf_state
+      loop:
+        - "terraform state show $(terraform state list | grep aws_iam_role.ec2_role | head -n 1) | grep '^ *arn ' | awk '{print $3}' | tr -d '\"'"
+        - "terraform state show $(terraform state list | grep aws_s3_bucket. | head -n 1) | grep '^ *bucket ' | awk '{print $3}' | tr -d '\"'"
+        - "terraform output -raw configure_kubectl | awk -F'--name ' '{print $2}'"
+      changed_when: false
+
+    - name: 6. Update local kubeconfig for EKS Cluster
+      ansible.builtin.command: |
+        aws eks update-kubeconfig --region {{ region }} --name {{ tf_state.results[2].stdout }}
+      changed_when: false
+
+    - name: 7. Apply base Kubernetes manifests
+      ansible.builtin.shell: |
+        kubectl apply -f config/namespace.yaml
+        kubectl apply -f config/configmaps.yaml
+        kubectl apply -f config/secret.yaml 
+        kubectl apply -f backend/
+        kubectl apply -f worker/
+        kubectl apply -f frontend/
+      args:
+        chdir: K8S
+
+    - name: 8a. Inject DB Host into Backend
+      ansible.builtin.command: |
+        kubectl set env deployment/backend DB_HOST={{ tf_db.results[0].stdout }} -n {{ namespace }}
+      when: tf_db.results[0].stdout != ""
+
+    - name: 8b. Inject DB Credentials into Secrets
+      ansible.builtin.command: |
+        kubectl patch secret app-secrets -n {{ namespace }} -p '{"stringData": {"DB_USER": "{{ tf_db.results[1].stdout }}", "DB_PASSWORD": "{{ tf_db.results[2].stdout }}"}}'
+      when: tf_db.results[1].stdout != "" and tf_db.results[2].stdout != ""
+
+    - name: 8c. Inject S3 Bucket into ConfigMap
+      ansible.builtin.command: |
+        kubectl patch configmap app-config -n {{ namespace }} -p '{"data": {"S3_BUCKET_NAME": "{{ tf_state.results[1].stdout }}"}}'
+      when: tf_state.results[1].stdout != ""
+
+    - name: 8d. Inject IAM Role ARN into ServiceAccount
+      ansible.builtin.command: |
+        kubectl annotate serviceaccount backend-sa -n {{ namespace }} eks.amazonaws.com/role-arn={{ tf_state.results[0].stdout }} --overwrite
+      when: tf_state.results[0].stdout != ""
+
+    - name: 9. Perform rollout restart
+      ansible.builtin.command: |
+        kubectl rollout restart deployment/{{ item }} -n {{ namespace }}
+      loop:
+        - backend
+        - worker
+        - frontend

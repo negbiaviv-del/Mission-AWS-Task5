@@ -1,0 +1,14 @@
+---
+# חלק 1: שרתי האינטרנט
+- name: Configure Web Servers
+  hosts: web
+  become: true
+  roles:
+    - nginx
+
+# חלק 2: שרתי האפליקציה (זה מה שחיברנו עכשיו!)
+- name: Configure Application Servers
+  hosts: backend
+  become: true
+  roles:
+    - app

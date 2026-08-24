@@ -1,0 +1,73 @@
+name: CI Quality Gates
+
+# ה-Workflow ירוץ על כל פוש לענף main ועל כל Pull Request
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # 1. בדיקות הקוד והתשתיות
+  lint-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # בדיקת עיצוב ותקינות של Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+      - name: Terraform Format Check
+        working-directory: ./Terraform
+        run: terraform fmt -check
+      - name: Terraform Validate
+        working-directory: ./Terraform
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      # בדיקות תחביר של Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Python Syntax Check
+        run: |
+          python -m py_compile Backend/*.py
+          python -m py_compile Worker/*.py
+
+      # בדיקת תקינות של קבצי ה-YAML (ל-Kubernetes)
+      - name: YAML Lint
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          file_or_dir: K8S/
+
+  # 2. סריקות אבטחה (סודות ו-Trivy)
+  security-scans:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # סריקת סודות שנחשפו בטעות (TruffleHog)
+      - name: Secret Scanning
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ""
+          head: ${{ github.sha }}
+          extra_args: --no-verification
+          
+      # סריקת קבצי הקונפיגורציה (Terraform ו-Kubernetes) לפרצות אבטחה עם Trivy
+      - name: Run Trivy vulnerability scanner in fs mode
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
