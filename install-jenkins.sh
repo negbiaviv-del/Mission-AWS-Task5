@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-GITHUB_REPO_URL="https://github.com/negbiaviv-del/Mission-AWS-Task4.git"
+GITHUB_REPO_URL="https://github.com/negbiaviv-del/Mission-AWS-Task5.git"
 
 echo "======================================================"
 echo "🔐 Fetching GitHub credentials securely from AWS Secrets Manager..."
@@ -140,7 +140,7 @@ controller:
                           scm {
                               git {
                                   remote {
-                                      url('https://github.com/negbiaviv-del/Mission-AWS-Task4.git')
+                                      url('https://github.com/negbiaviv-del/Mission-AWS-Task5.git')
                                       credentials('github-credentials')
                                   }
                                   branch('*/main')

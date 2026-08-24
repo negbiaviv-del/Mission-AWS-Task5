@@ -3,7 +3,7 @@ controller:
   serviceAccount:
     create: false
     name: jenkins-admin
-    
+
   # רשימת הפלאגינים שיותקנו אוטומטית
   installPlugins:
     - kubernetes:4.3.0
@@ -14,7 +14,7 @@ controller:
     - credentials-binding:714.v82361b_a_23eb_b_
     - aws-credentials:238.v3391b_c7f66a_a_
     - pipeline-stage-view:2.34
-  
+
   # הגדרות Jenkins Configuration as Code (JCasC)
   JCasC:
     defaultConfig: true
@@ -24,7 +24,7 @@ controller:
           systemMessage: "Jenkins configured automatically by JCasC - DevOps on AWS Project (Mission 4)"
           # ביטול הרצת Builds על ה-Controller עצמו (דרישת אבטחה)
           numExecutors: 0
-        
+
         # יצירת ה-Jobs שלנו אוטומטית כקוד באמצעות Job DSL
         jobs:
           - script: >
@@ -35,7 +35,7 @@ controller:
                           scm {
                               git {
                                   // === חשוב: נא לעדכן את ה-URL לכתובת הגיט האמיתית שלך ===
-                                  remote { url('https://github.com/YOUR_USERNAME/YOUR_REPO.git') }
+                                  remote { url('https://github.com/negbiaviv-del/Mission-AWS-Task5.git') }
                                   branch('*/main')
                               }
                           }
@@ -53,7 +53,7 @@ controller:
                           scm {
                               git {
                                   // === חשוב: נא לעדכן את ה-URL לכתובת הגיט האמיתית שלך ===
-                                  remote { url('https://github.com/YOUR_USERNAME/YOUR_REPO.git') }
+                                  remote { url('https://github.com/negbiaviv-del/Mission-AWS-Task5.git') }
                                   branch('*/main')
                               }
                           }
