@@ -161,7 +161,7 @@ controller:
                           scm {
                               git {
                                   remote {
-                                      url('https://github.com/negbiaviv-del/Mission-AWS-Task4.git')
+                                      url('https://github.com/negbiaviv-del/Mission-AWS-Task5.git')
                                       credentials('github-credentials')
                                   }
                                   branch('*/main')
@@ -239,3 +239,21 @@ echo "👤 Username : admin"
 echo "🔑 Password : $JENKINS_PASSWORD"
 echo "🌐 URL      : http://$JENKINS_URL:8080"
 echo "======================================================"
+
+echo "===> Automating GitHub Webhook creation..."
+curl -s -X POST -H "Accept: application/vnd.github.v3+json" \
+  -H "Authorization: token $GITHUB_TOKEN" \
+  https://api.github.com/repos/negbiaviv-del/Mission-AWS-Task5/hooks \
+  -d '{
+    "name": "web",
+    "active": true,
+    "events": [
+      "push"
+    ],
+    "config": {
+      "url": "http://'"$JENKINS_URL"':8080/github-webhook/",
+      "content_type": "json",
+      "insecure_ssl": "1"
+    }
+  }'
+echo -e "\n===> GitHub Webhook created successfully!"
