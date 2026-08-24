@@ -1,0 +1,67 @@
+# monitoring/prometheus-values.yaml
+
+prometheus:
+  prometheusSpec:
+    # שמירת נתונים ל-15 ימים
+    retention: 15d
+
+    # הגדרת אסטרטגיית איסוף - חשוב מאוד! מאפשר ל-Prometheus לאסוף כל ServiceMonitor שנגדיר
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+    # הגדרת נפח אחסון קבוע (PVC) - דרישת חובה
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp2
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
+
+    # הגבלת משאבים (Requests/Limits)
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+grafana:
+  # חובה: הגדרת Sidecar לטעינה אוטומטית של Dashboards ו-Datasources מתוך הקוד (GitOps)
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+
+  # הגדרת אחסון קבוע לגרפנה
+  persistence:
+    enabled: true
+    storageClassName: gp2
+    size: 5Gi
+
+alertmanager:
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['job']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      # הגדרת יעד חסר משמעות כפי שנדרש (Dummy Receiver)
+      receiver: 'dummy-receiver'
+    receivers:
+    - name: 'dummy-receiver'
+
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp2
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
