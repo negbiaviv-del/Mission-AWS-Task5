@@ -8,11 +8,11 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: backend # שנה את זה אם התווית של ה-Service שלך שונה
+      app: backend
   namespaceSelector:
     matchNames:
-      - devops-app # ה-Namespace שבו רצה האפליקציה שלך
+      - devops-app
   endpoints:
-    - port: http # חשוב: זה חייב להיות *השם* של הפורט כפי שמוגדר ב-Service של הבקאנד
+    - port: http
       path: /metrics
       interval: 15s
