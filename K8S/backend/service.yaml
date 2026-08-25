@@ -9,6 +9,7 @@ spec:
   selector:
     app: backend  # תואם לתוויות (labels) שהגדרנו ב-Deployment
   ports:
-    - protocol: TCP
-      port: 5000  # הפורט שה-Service יחשוף בתוך הקלאסטר
-      targetPort: 5000  # הפורט שבו הפוד עצמו (Flask) מאזין
+    - name: http       # <--- הוסף את השורה הזו
+      protocol: TCP
+      port: 5000 # הפורט שזה Service קלאסטר
+      targetPort: 5000 # הפורט שבו הפוד עצמו (Flask) מאזין
