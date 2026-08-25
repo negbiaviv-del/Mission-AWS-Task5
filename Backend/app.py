@@ -5,19 +5,23 @@ from psycopg2.extras import RealDictCursor
 import boto3
 from flask import Flask, render_template_string, request, redirect, url_for, flash, Response, jsonify
 from flask_cors import CORS
-from datetime import datetime # <-- הוספנו ייבוא לזמן
+from datetime import datetime
+from prometheus_flask_exporter import PrometheusMetrics # <-- הוספנו את הייבוא של פרומתיאוס
 
 app = Flask(__name__)
 
+# פקודה זו עוטפת את האפליקציה ומייצרת אוטומטית את נתיב ה-/metrics
+metrics = PrometheusMetrics(app) # <-- הפעלת המדדים של פרומתיאוס
+
 # סגירת פרצת ה-CORS: מאפשרים גישה רק למה שמגיע מה-Frontend שלנו
-FRONTEND_URL = os.getenv("FRONTEND_URL", "*") 
+FRONTEND_URL = os.getenv("FRONTEND_URL", "*")
 CORS(app, resources={r"/*": {"origins": FRONTEND_URL}})
 
 app.secret_key = os.getenv("SECRET_KEY", "default-dev-key")
 
 # --- AWS Configuration ---
 SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL")
-S3_BUCKET_NAME = os.getenv("S3_BUCKET") 
+S3_BUCKET_NAME = os.getenv("S3_BUCKET")
 SNS_TOPIC_ARN = os.getenv("SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:544471418394:aviv-project-alerts-v2").strip()
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
@@ -31,7 +35,7 @@ DB_CONFIG = {
     "database": os.getenv("DB_NAME", "postgres"),
     "user": os.getenv("DB_USER", "postgres"),
     "password": os.getenv("DB_PASSWORD"),
-    "sslmode": "require"  
+    "sslmode": "require"
 }
 
 # --- HTML Template ---
@@ -76,7 +80,7 @@ HTML_TEMPLATE = """
     </div>
 
     <div class="max-w-5xl mx-auto px-4 pb-20">
-        
+
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
@@ -227,8 +231,8 @@ HTML_TEMPLATE = """
             const countSpan = document.getElementById('selectedCount');
             countSpan.innerText = checkboxes.length;
             if (checkboxes.length > 0) { bulkBtn.classList.remove('hidden'); }
-            else { 
-                bulkBtn.classList.add('hidden'); 
+            else {
+                bulkBtn.classList.add('hidden');
                 document.getElementById('selectAll').checked = false;
             }
         }
@@ -274,7 +278,7 @@ HTML_TEMPLATE = """
 """
 
 def get_db_connection():
-    DB_CONFIG['sslmode'] = 'require' 
+    DB_CONFIG['sslmode'] = 'require'
     return psycopg2.connect(**DB_CONFIG)
 
 # --- הוספת נתיב Healthcheck חכם ---
@@ -316,12 +320,12 @@ def add_entry():
     instance_type = request.form.get('instance_type')
     script = request.form.get('script')
     output_type = request.form.get('output_type')
-    
+
     if name and instance_type:
         try:
             # התיקון שלנו: חותמת זמן דינמית ואמיתית!
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
+
             full_payload = {
                 "Base_Machine_Name": name,
                 "Number_of_Instances": instances,
@@ -329,7 +333,7 @@ def add_entry():
                 "Instance_Type": instance_type,
                 "Post_Launch_Script": script,
                 "Infrastructure_Output_Type": output_type,
-                "Created_At": current_time 
+                "Created_At": current_time
             }
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
@@ -338,14 +342,14 @@ def add_entry():
 
             s3_key = f"logs/config_{name}.json"
             s3_client.put_object(Bucket=S3_BUCKET_NAME, Key=s3_key, Body=json.dumps(full_payload, indent=4))
-            
+
             sqs_message = {
                 "s3_bucket": S3_BUCKET_NAME,
                 "s3_key": s3_key,
                 "action": "process_infra"
             }
             sqs_client.send_message(QueueUrl=SQS_QUEUE_URL, MessageBody=json.dumps(sqs_message))
-            
+
             sns_message = f"""
 ======= 🚀 CLOUD DEPLOYMENT ALERT =======
 📌 Project: {name}
@@ -405,7 +409,7 @@ def delete_entry(entry_id):
                 if row:
                     name = row['name']
                     details = json.loads(row['status'])
-                    
+
                     del_message = f"""
 🗑️ INFRASTRUCTURE REMOVED
 ------------------------------------------
@@ -423,7 +427,7 @@ Action: Permanent Deletion Completed.
 """
                     sns_client.publish(TopicArn=SNS_TOPIC_ARN, Message=del_message, Subject=f"Infrastructure Deleted: {name}")
                     cur.execute("DELETE FROM mission_data WHERE id = %s;", (entry_id,))
-        
+
         flash(f"Record '{name}' deleted.", "success")
     except Exception as e:
         flash(f"Error: {e}", "error")
@@ -441,12 +445,12 @@ def delete_multiple():
                 id_tuple = tuple(int(i) for i in ids)
                 cur.execute("SELECT id, name, status FROM mission_data WHERE id IN %s;", (id_tuple,))
                 deleted_rows = cur.fetchall()
-                
+
                 report_items = []
                 for r in deleted_rows:
                     det = json.loads(r['status'])
                     report_items.append(f"• {r['name']} (#{r['id']}): {det.get('Number_of_Instances')}x {det.get('Instance_Type')}")
-                
+
                 bulk_message = f"""
 🚨 BULK TERMINATION EVENT
 ------------------------------------------
@@ -460,7 +464,7 @@ Priority: High - Cleanup successful.
 """
                 sns_client.publish(TopicArn=SNS_TOPIC_ARN, Message=bulk_message, Subject="Infrastructure Alert: Bulk Action")
                 cur.execute("DELETE FROM mission_data WHERE id IN %s;", (id_tuple,))
-        
+
         flash(f"Deleted {len(ids)} instances.", "success")
         return jsonify({"status": "success"})
 
