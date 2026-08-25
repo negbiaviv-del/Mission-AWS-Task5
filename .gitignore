@@ -30,4 +30,6 @@ secrets.yml
 .vscode/
 
 # K8S
-secret.yaml
+secret.yaml*.tfstate
+*.tfstate.*
+.terraform/

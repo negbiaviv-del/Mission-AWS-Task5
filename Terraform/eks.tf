@@ -19,8 +19,8 @@ module "eks" {
   eks_managed_node_groups = {
     main_group = {
       min_size       = 1
-      max_size       = 3
-      desired_size   = 2
+      max_size       = 4
+      desired_size   = 4
       instance_types = ["t3.small"]
       ami_type       = "AL2_x86_64"
 
@@ -94,7 +94,7 @@ resource "helm_release" "external_secrets" {
     value = "true"
   }
 
-  # התוספת החדשה: הבטחה שיתבצע סנכרון מלא ואישור של המשאבים 
+  # התוספת החדשה: הבטחה שיתבצע סנכרון מלא ואישור של המשאבים
   wait    = true
   timeout = 300
 }

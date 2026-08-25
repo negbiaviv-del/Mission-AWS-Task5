@@ -67,9 +67,33 @@ subjects:
     namespace: jenkins
 EOF
 
+echo "==> Generating Jenkins ServiceMonitor for Prometheus..."
+cat << 'EOF' > jenkins/jenkins-monitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: jenkins-monitor
+  namespace: observability
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: jenkins
+      app.kubernetes.io/name: jenkins
+  namespaceSelector:
+    matchNames:
+      - jenkins
+  endpoints:
+    - port: http
+      path: /prometheus/
+      interval: 30s
+EOF
+
 echo "==> Generating Jenkins Helm values (JCasC)..."
 cat << 'EOF' > jenkins/jenkins-values.yaml
 controller:
+  serviceType: LoadBalancer
   serviceAccount:
     create: false
     name: jenkins-admin
@@ -109,6 +133,7 @@ controller:
     - credentials-binding
     - aws-credentials
     - pipeline-stage-view
+    - prometheus
 
   JCasC:
     defaultConfig: true
@@ -173,9 +198,10 @@ controller:
               }
 EOF
 
-echo "==> Applying Namespace and RBAC..."
+echo "==> Applying Namespace, RBAC, and ServiceMonitor..."
 kubectl apply -f jenkins/jenkins-namespace.yaml
 kubectl apply -f jenkins/jenkins-rbac.yaml
+kubectl apply -f jenkins/jenkins-monitor.yaml
 
 echo "==> Automating StorageClass Configuration..."
 kubectl patch storageclass gp2 -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' || echo "StorageClass gp2 patch failed or already set."
@@ -214,9 +240,6 @@ helm upgrade --install jenkins jenkinsci/jenkins \
 echo "======================================================"
 echo "Jenkins installation initiated successfully!"
 echo "======================================================"
-
-echo "🌐 Configuring AWS Load Balancer for Jenkins..."
-kubectl patch svc jenkins -n jenkins -p '{"spec": {"type": "LoadBalancer"}}'
 
 echo "⏳ Waiting for Jenkins Pods to be Ready (this can take 3-4 minutes)..."
 kubectl rollout status statefulset/jenkins -n jenkins --timeout=300s
