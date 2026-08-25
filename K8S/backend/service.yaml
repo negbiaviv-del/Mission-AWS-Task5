@@ -15,3 +15,4 @@ spec:
       protocol: TCP
       port: 5000  # הפורט שזה Service קלאסטר
       targetPort: 5000  # הפורט שבו הפוד עצמו מאזין
+      
