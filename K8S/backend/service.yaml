@@ -4,8 +4,10 @@ kind: Service
 metadata:
   name: backend-service
   namespace: devops-app
+  labels:            
+    app: backend
 spec:
-  type: ClusterIP  # קובע שהשירות יהיה זמין רק בתוך הקלאסטר
+  type: ClusterIP
   selector:
     app: backend  # תואם לתוויות (labels) שהגדרנו ב-Deployment
   ports:
