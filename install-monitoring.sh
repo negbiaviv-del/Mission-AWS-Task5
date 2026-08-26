@@ -8,6 +8,10 @@ echo "======================================================"
 echo "⚙️ Preparing EKS Cluster for Observability Stack..."
 echo "======================================================"
 
+# --- תוספת 1: חיבור אוטומטי לקלאסטר ---
+echo "===> Updating Kubeconfig automatically..."
+aws eks update-kubeconfig --region $REGION --name $CLUSTER_NAME
+
 echo "===> Ensuring AWS EBS CSI Driver is installed for PVC provisioning..."
 aws eks create-addon \
   --cluster-name $CLUSTER_NAME \
@@ -57,6 +61,11 @@ EOF
 
 echo "===> Applying Backend ServiceMonitor..."
 kubectl apply -f monitoring/app-monitor.yaml
+
+# --- תוספת 2: הזרקת הדאשבורדים אוטומטית למערכת ---
+echo "===> Injecting Grafana Dashboards as Code..."
+kubectl apply -f monitoring/backend-dashboard.yaml
+kubectl apply -f monitoring/jenkins-dashboard.yaml
 
 echo "===> Waiting for AWS to provision a Load Balancer for Grafana (this may take 2-3 minutes)..."
 while [ -z "$(kubectl get svc kube-prometheus-stack-grafana -n observability -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)" ]; do
