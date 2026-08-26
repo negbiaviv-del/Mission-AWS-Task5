@@ -58,11 +58,19 @@ EOF
 echo "===> Applying Backend ServiceMonitor..."
 kubectl apply -f monitoring/app-monitor.yaml
 
+echo "===> Waiting for AWS to provision a Load Balancer for Grafana (this may take 2-3 minutes)..."
+while [ -z "$(kubectl get svc kube-prometheus-stack-grafana -n observability -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)" ]; do
+  sleep 10
+  echo "Still waiting for AWS ELB..."
+done
+
+GRAFANA_URL=$(kubectl get svc kube-prometheus-stack-grafana -n observability -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+
 echo "======================================================"
 echo "✅ Observability Stack successfully installed and connected!"
 echo "======================================================"
-echo "To access Grafana, set up port forwarding:"
-echo "kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n observability"
+echo "🌍 Grafana is now automatically exposed to the internet via AWS LoadBalancer:"
+echo "URL: http://$GRAFANA_URL"
 echo ""
 echo "Username: admin"
 echo "To retrieve your dynamically generated password, run:"

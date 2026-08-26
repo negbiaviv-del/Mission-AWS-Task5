@@ -27,13 +27,17 @@ prometheus:
         memory: 1Gi
 
 grafana:
+  # הגדרת חשיפה אוטומטית החוצה ללא צורך ב-Port Forward
+  service:
+    type: LoadBalancer
+
   # חובה: הגדרת Sidecar לטעינה אוטומטית של Dashboards מתוך הקוד (GitOps)
   sidecar:
     dashboards:
       enabled: true
       label: grafana_dashboard
       labelValue: "1"
-      searchNamespace: ALL  # התוספת שלנו כדי שיחפש דאשבורדים בכל הקלאסטר
+      searchNamespace: ALL
 
   # הגדרת אחסון קבוע לגרפנה
   persistence:
