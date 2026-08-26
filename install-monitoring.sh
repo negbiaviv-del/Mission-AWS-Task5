@@ -9,7 +9,6 @@ echo "⚙️ Preparing EKS Cluster for Observability Stack..."
 echo "======================================================"
 
 echo "===> Ensuring AWS EBS CSI Driver is installed for PVC provisioning..."
-# הפקודה מתקינה את הדרייבר, ואם הוא כבר קיים היא פשוט תמשיך הלאה בלי להיכשל
 aws eks create-addon \
   --cluster-name $CLUSTER_NAME \
   --addon-name aws-ebs-csi-driver \
@@ -62,6 +61,9 @@ kubectl apply -f monitoring/app-monitor.yaml
 echo "======================================================"
 echo "✅ Observability Stack successfully installed and connected!"
 echo "======================================================"
-echo "To access Grafana, run:"
+echo "To access Grafana, set up port forwarding:"
 echo "kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n observability"
-echo "Username: admin | Password: prom-operator"
+echo ""
+echo "Username: admin"
+echo "To retrieve your dynamically generated password, run:"
+echo "kubectl get secret -n observability kube-prometheus-stack-grafana -o jsonpath=\"{.data.admin-password}\" | base64 --decode ; echo"

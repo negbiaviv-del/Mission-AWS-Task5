@@ -1,5 +1,3 @@
-# monitoring/prometheus-values.yaml
-
 prometheus:
   prometheusSpec:
     # שמירת נתונים ל-15 ימים
@@ -29,12 +27,13 @@ prometheus:
         memory: 1Gi
 
 grafana:
-  # חובה: הגדרת Sidecar לטעינה אוטומטית של Dashboards ו-Datasources מתוך הקוד (GitOps)
+  # חובה: הגדרת Sidecar לטעינה אוטומטית של Dashboards מתוך הקוד (GitOps)
   sidecar:
     dashboards:
       enabled: true
       label: grafana_dashboard
       labelValue: "1"
+      searchNamespace: ALL  # התוספת שלנו כדי שיחפש דאשבורדים בכל הקלאסטר
 
   # הגדרת אחסון קבוע לגרפנה
   persistence:

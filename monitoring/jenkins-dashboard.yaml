@@ -1,0 +1,54 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jenkins-dashboard
+  namespace: observability
+  labels:
+    grafana_dashboard: "1"
+data:
+  jenkins-metrics.json: |-
+    {
+      "title": "Jenkins CI/CD Metrics",
+      "tags": ["jenkins", "ci-cd"],
+      "timezone": "browser",
+      "panels": [
+        {
+          "title": "Build Queue Size",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
+          "targets": [
+            {
+              "expr": "jenkins_queue_size_value",
+              "legendFormat": "Jobs in Queue"
+            }
+          ]
+        },
+        {
+          "title": "Active Executors",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 8, "x": 8, "y": 0 },
+          "targets": [
+            {
+              "expr": "jenkins_executor_count_value",
+              "legendFormat": "Total Executors"
+            }
+          ]
+        },
+        {
+          "title": "Build Status (Success vs Failed)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 16, "x": 0, "y": 6 },
+          "targets": [
+            {
+              "expr": "rate(jenkins_builds_success_build_count_value[5m])",
+              "legendFormat": "Success"
+            },
+            {
+              "expr": "rate(jenkins_builds_failed_build_count_value[5m])",
+              "legendFormat": "Failed"
+            }
+          ]
+        }
+      ]
+    }
