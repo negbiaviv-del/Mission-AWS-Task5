@@ -80,7 +80,6 @@ To easily access the Prometheus UI in the background without blocking your termi
     ./open-prometheus.sh
 
 ### Accessing Grafana & Dashboards
-
 The installation process is fully automated. You do not need to set up local port-forwarding.
 The `./install-monitoring.sh` script automatically provisions an AWS LoadBalancer and configures the connection.
 
@@ -92,6 +91,14 @@ At the end of the script execution, the terminal will automatically output:
 *(Fallback: If you clear your terminal and need to retrieve the password again manually, run:)*
 ```bash
 kubectl get secret -n observability kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+```
+
+### Observability Operations & Data Recovery
+* **Data Retention:** Prometheus is configured with a **15-day** retention policy for all scraped metrics.
+* **Storage Consumption:** A **20Gi Persistent Volume Claim (PVC)** utilizing the AWS EBS `gp2` storage class is dedicated to Prometheus to ensure adequate historical storage capacity.
+* **Disaster Recovery (Pod/PVC Failure):**
+  * **Pod Deletion/Crash:** The metric data is decoupled from the Pod lifecycle via the PVC. If the Prometheus Pod crashes or is deleted, Kubernetes will automatically spin up a replacement and reattach the existing EBS volume, ensuring **zero data loss**.
+  * **PVC Deletion:** If the PVC itself is accidentally deleted, the Helm chart's `volumeClaimTemplate` will automatically provision a fresh 20Gi volume upon the next cluster reconciliation. *(Note: For complete disaster recovery against PVC deletion, AWS EBS volume snapshots should be configured)*.
 
 ### 3. Jenkins Bootstrapping (Zero-Touch)
 **Prerequisite:** Ensure a secret named `jenkins-github-auth` is created in AWS Secrets Manager (`us-east-1`) containing your GitHub `username` and `pat` (Personal Access Token).

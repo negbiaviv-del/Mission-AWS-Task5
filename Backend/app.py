@@ -6,12 +6,17 @@ import boto3
 from flask import Flask, render_template_string, request, redirect, url_for, flash, Response, jsonify
 from flask_cors import CORS
 from datetime import datetime
-from prometheus_flask_exporter import PrometheusMetrics # <-- הוספנו את הייבוא של פרומתיאוס
+from prometheus_flask_exporter import PrometheusMetrics
+from prometheus_client import Counter # <-- תוספת המדדים העסקיים
 
 app = Flask(__name__)
 
 # פקודה זו עוטפת את האפליקציה ומייצרת אוטומטית את נתיב ה-/metrics
-metrics = PrometheusMetrics(app) # <-- הפעלת המדדים של פרומתיאוס
+metrics = PrometheusMetrics(app)
+
+# --- Custom Business Metrics (Page 3 Requirement) ---
+INFRA_CREATED_METRIC = Counter('business_infra_created_total', 'Total number of infrastructure configurations successfully created')
+INFRA_DELETED_METRIC = Counter('business_infra_deleted_total', 'Total number of infrastructure configurations deleted', ['deletion_type'])
 
 # סגירת פרצת ה-CORS: מאפשרים גישה רק למה שמגיע מה-Frontend שלנו
 FRONTEND_URL = os.getenv("FRONTEND_URL", "*")
@@ -366,6 +371,10 @@ def add_entry():
 ===========================================
 """
             sns_client.publish(TopicArn="arn:aws:sns:us-east-1:544471418394:aviv-project-alerts-v2", Message=sns_message, Subject=f"Full Config Created: {name}")
+
+            # --- עדכון המדד העסקי של פרומתיאוס (הקפצת יצירה) ---
+            INFRA_CREATED_METRIC.inc()
+
             flash(f"Successfully created '{name}'!", "success")
             return redirect(url_for('index', last_id=new_id))
         except Exception as e:
@@ -428,6 +437,9 @@ Action: Permanent Deletion Completed.
                     sns_client.publish(TopicArn=SNS_TOPIC_ARN, Message=del_message, Subject=f"Infrastructure Deleted: {name}")
                     cur.execute("DELETE FROM mission_data WHERE id = %s;", (entry_id,))
 
+                    # --- עדכון המדד העסקי של פרומתיאוס (מחיקה בודדת) ---
+                    INFRA_DELETED_METRIC.labels(deletion_type='single').inc()
+
         flash(f"Record '{name}' deleted.", "success")
     except Exception as e:
         flash(f"Error: {e}", "error")
@@ -464,6 +476,9 @@ Priority: High - Cleanup successful.
 """
                 sns_client.publish(TopicArn=SNS_TOPIC_ARN, Message=bulk_message, Subject="Infrastructure Alert: Bulk Action")
                 cur.execute("DELETE FROM mission_data WHERE id IN %s;", (id_tuple,))
+
+                # --- עדכון המדד העסקי של פרומתיאוס (מחיקה מרובה) ---
+                INFRA_DELETED_METRIC.labels(deletion_type='bulk').inc(len(ids))
 
         flash(f"Deleted {len(ids)} instances.", "success")
         return jsonify({"status": "success"})
