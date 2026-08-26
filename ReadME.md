@@ -68,15 +68,7 @@ Ensure you have a `secrets.auto.tfvars` file containing your `master_db_password
     terraform init
     terraform apply -auto-approve
 
-### 2. Jenkins Bootstrapping (Zero-Touch)
-**Prerequisite:** Ensure a secret named `jenkins-github-auth` is created in AWS Secrets Manager (`us-east-1`) containing your GitHub `username` and `pat` (Personal Access Token).
-
-Run the automated deployment script. This script fetches the required AWS secrets dynamically into memory, applies Helm values and JCasC configurations, and automatically creates the Jenkins CI/CD pipelines without any manual UI interaction:
-
-    chmod +x install-jenkins.sh
-    ./install-jenkins.sh
-
-### 3. Observability & Monitoring (Prometheus & Grafana)
+### 2. Observability & Monitoring (Prometheus & Grafana)
 Deploy the complete monitoring stack (`kube-prometheus-stack`) into the `observability` namespace. This script automatically configures the Helm charts and applies the `ServiceMonitor` resources to auto-discover the application and Jenkins metrics:
 
     chmod +x install-monitoring.sh
@@ -86,7 +78,7 @@ To easily access the Prometheus UI in the background without blocking your termi
 
     chmod +x open-prometheus.sh
     ./open-prometheus.sh
-    
+
 To access the Grafana Dashboards, set up a port-forward and open `http://localhost:3000` in your browser:
 
     kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n observability
@@ -97,6 +89,14 @@ Instead of hardcoding credentials, retrieve the dynamically generated admin pass
 * **Password:** Run the following command to securely fetch and decode the password:
   ```bash
   kubectl get secret -n observability kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+
+### 3. Jenkins Bootstrapping (Zero-Touch)
+**Prerequisite:** Ensure a secret named `jenkins-github-auth` is created in AWS Secrets Manager (`us-east-1`) containing your GitHub `username` and `pat` (Personal Access Token).
+
+Run the automated deployment script. This script fetches the required AWS secrets dynamically into memory, applies Helm values and JCasC configurations, and automatically creates the Jenkins CI/CD pipelines without any manual UI interaction:
+
+    chmod +x install-jenkins.sh
+    ./install-jenkins.sh
 
 ### 4. Verification & Testing
 1. **Access Jenkins:** Use the credentials provisioned by JCasC to log into the Jenkins UI (URL provided by the install script).
