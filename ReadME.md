@@ -79,16 +79,19 @@ To easily access the Prometheus UI in the background without blocking your termi
     chmod +x open-prometheus.sh
     ./open-prometheus.sh
 
-To access the Grafana Dashboards, set up a port-forward and open `http://localhost:3000` in your browser:
+### Accessing Grafana & Dashboards
 
-    kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n observability
+The installation process is fully automated. You do not need to set up local port-forwarding.
+The `./install-monitoring.sh` script automatically provisions an AWS LoadBalancer and configures the connection.
 
-**Grafana Credentials:**
-Instead of hardcoding credentials, retrieve the dynamically generated admin password directly from the Kubernetes secret:
-* **Username:** `admin`
-* **Password:** Run the following command to securely fetch and decode the password:
-  ```bash
-  kubectl get secret -n observability kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+At the end of the script execution, the terminal will automatically output:
+1. The **Direct URL** to access Grafana via the AWS LoadBalancer.
+2. The **Username** (`admin`).
+3. The **Dynamically Generated Password**, which the script securely extracts from the Kubernetes secret for you.
+
+*(Fallback: If you clear your terminal and need to retrieve the password again manually, run:)*
+```bash
+kubectl get secret -n observability kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
 
 ### 3. Jenkins Bootstrapping (Zero-Touch)
 **Prerequisite:** Ensure a secret named `jenkins-github-auth` is created in AWS Secrets Manager (`us-east-1`) containing your GitHub `username` and `pat` (Personal Access Token).
