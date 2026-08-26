@@ -67,6 +67,10 @@ echo "===> Injecting Grafana Dashboards as Code..."
 kubectl apply -f monitoring/backend-dashboard.yaml
 kubectl apply -f monitoring/jenkins-dashboard.yaml
 
+# --- תוספת 3: אבטחת רשת ---
+echo "===> Applying Strict NetworkPolicies for Observability..."
+kubectl apply -f monitoring/observability-network-policy.yaml
+
 echo "===> Waiting for AWS to provision a Load Balancer for Grafana (this may take 2-3 minutes)..."
 while [ -z "$(kubectl get svc kube-prometheus-stack-grafana -n observability -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)" ]; do
   sleep 10
