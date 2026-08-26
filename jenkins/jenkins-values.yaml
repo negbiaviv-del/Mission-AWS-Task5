@@ -1,5 +1,5 @@
 controller:
-  serviceType: LoadBalancer # <-- התוספת שמונעת את שגיאת השדרוג ושומרת על הכתובת החיצונית
+  serviceType: LoadBalancer
   serviceAccount:
     create: false
     name: jenkins-admin
@@ -39,7 +39,7 @@ controller:
     - credentials-binding
     - aws-credentials
     - pipeline-stage-view
-    - prometheus # <-- התוספת שמאפשרת לפרומתיאוס למשוך מדדים מג'נקינס
+    - prometheus
 
   JCasC:
     defaultConfig: true

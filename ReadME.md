@@ -76,13 +76,36 @@ Run the automated deployment script. This script fetches the required AWS secret
     chmod +x install-jenkins.sh
     ./install-jenkins.sh
 
-### 3. Verification & Testing
+### 3. Observability & Monitoring (Prometheus & Grafana)
+Deploy the complete monitoring stack (`kube-prometheus-stack`) into the `observability` namespace. This script automatically configures the Helm charts and applies the `ServiceMonitor` resources to auto-discover the application and Jenkins metrics:
+
+    chmod +x install-monitoring.sh
+    ./install-monitoring.sh
+
+To easily access the Prometheus UI in the background without blocking your terminal, use the provided helper script:
+
+    chmod +x open-prometheus.sh
+    ./open-prometheus.sh
+    
+To access the Grafana Dashboards, set up a port-forward and open `http://localhost:3000` in your browser:
+
+    kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n observability
+
+**Grafana Credentials:**
+Instead of hardcoding credentials, retrieve the dynamically generated admin password directly from the Kubernetes secret:
+* **Username:** `admin`
+* **Password:** Run the following command to securely fetch and decode the password:
+  ```bash
+  kubectl get secret -n observability kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+
+### 4. Verification & Testing
 1. **Access Jenkins:** Use the credentials provisioned by JCasC to log into the Jenkins UI (URL provided by the install script).
 2. **Access the Application:** Navigate to the Application Load Balancer URL. The environment is secured via Ingress Basic Authentication.
-   The dynamically generated password is printed securely in the terminal output upon successful completion of the `deploy-app.sh` script.
+   The dynamically generated password is printed securely in the terminal output upon successful completion of the deployment script.
    * **Username:** `admin`
-   * **Password:** (Check your terminal output from step 2)
-3. **Trigger CI/CD:** Push a commit to the GitHub repository. Watch the `application-ci` job spin up an Agent Pod, build the images, and automatically trigger `application-cd` for deployment.
+   * **Password:** (Check your terminal output)
+3. **Verify Observability:** Access Prometheus (`http://localhost:9090/targets`) and ensure that both `backend-monitor` and `jenkins-monitor` targets are in an `UP` state.
+4. **Trigger CI/CD:** Push a commit to the GitHub repository. Watch the `application-ci` job spin up an Agent Pod, build the images, and automatically trigger `application-cd` for deployment.
 
 ---
 
@@ -97,16 +120,19 @@ Run the automated deployment script. This script fetches the required AWS secret
 1. **Single EKS Cluster for CI and App:** To optimize cloud costs, both Jenkins and the Application reside in the same EKS cluster, separated securely by Namespaces and strict RBAC policies, rather than maintaining two distinct clusters.
 2. **Dynamic Git SHA Tagging vs Digest:** We chose to use the short Git Commit SHA for Docker image tagging rather than the `sha256` Digest. This provides immediate traceability back to the exact code commit in GitHub for developers, enhancing operability and debuggability.
 3. **Basic Auth vs OIDC:** For demonstration purposes, the Application Ingress is secured using Basic Authentication. In a true enterprise environment, this would be replaced with an OAuth2-Proxy or AWS Cognito integration.
+4. **Automated vs Manual Service Discovery:** Instead of hardcoding targets in Prometheus, we utilized the Prometheus Operator's `ServiceMonitor` CRDs. This allows Prometheus to dynamically discover new pods and services based on Kubernetes labels, ensuring the monitoring stack automatically scales with the application.
 
 ---
 
 ## 🗑️ Teardown / Destroy
 To safely remove all AWS resources and avoid lingering charges, follow this exact sequence. This ensures no orphaned cloud resources (like AWS Load Balancers) are left behind by Kubernetes.
 
-1. **Delete Application Resources (Clears ALBs & ELBs):**
+1. **Delete Application & Observability Resources (Clears ALBs, ELBs, and EBS Volumes):**
    ```bash
    kubectl delete namespace devops-app
    helm uninstall jenkins -n jenkins
+   helm uninstall kube-prometheus-stack -n observability
+   kubectl delete namespace observability
    ```
 
 2. **Clean ECR Repositories (Removes Docker Images):**
