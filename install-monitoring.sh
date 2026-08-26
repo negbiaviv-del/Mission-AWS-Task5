@@ -75,6 +75,9 @@ done
 
 GRAFANA_URL=$(kubectl get svc kube-prometheus-stack-grafana -n observability -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 
+# משיכת הסיסמה הדינמית ישירות למשתנה בתוך הסקריפט
+GRAFANA_PASSWORD=$(kubectl get secret -n observability kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
+
 echo "======================================================"
 echo "✅ Observability Stack successfully installed and connected!"
 echo "======================================================"
@@ -82,5 +85,6 @@ echo "🌍 Grafana is now automatically exposed to the internet via AWS LoadBala
 echo "URL: http://$GRAFANA_URL"
 echo ""
 echo "Username: admin"
-echo "To retrieve your dynamically generated password, run:"
-echo "kubectl get secret -n observability kube-prometheus-stack-grafana -o jsonpath=\"{.data.admin-password}\" | base64 --decode ; echo"
+# מדפיסים את הסיסמה בתוך סוגריים מרובעים כדי שיהיה קל להעתיק אותה בלי רווחים בטעות
+echo "Password: [$GRAFANA_PASSWORD]"
+echo "======================================================"
