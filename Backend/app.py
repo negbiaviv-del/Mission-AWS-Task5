@@ -297,6 +297,10 @@ def health_check():
     except Exception as e:
         return jsonify({"status": "unhealthy", "error": str(e)}), 503
 
+@app.route('/error-drill')
+def error_drill():
+    return jsonify({"status": "error", "message": "Simulating high error rate!"}), 500
+
 @app.route('/')
 def index():
     rows = []
