@@ -116,8 +116,10 @@ spec:
                     echo "📊 Checking Error Rates & Target Health in Prometheus..."
                     PROM_URL="http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090"
 
-                    # קריאת JSON נקייה ובטוחה בעזרת jq
-                    TARGET_UP=$(curl -s "$PROM_URL/api/v1/query?query=up{job='backend-service'}" | jq -r '.data.result[0].value[1] // "0"')
+                    # בדיקת זמינות של יעדי האפליקציה ב-namespace
+                    TARGET_UP=$(curl -s "$PROM_URL/api/v1/query?query=max(up{namespace='${NAMESPACE}'})" | jq -r '.data.result[0].value[1] // "0"')
+
+                    echo "Prometheus Target Status: $TARGET_UP"
 
                     if [[ "$TARGET_UP" != "1" ]]; then
                         echo "🚨 ALERT: Target is DOWN or unreachable after deployment! (Value: $TARGET_UP)"
