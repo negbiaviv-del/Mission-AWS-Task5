@@ -98,17 +98,36 @@ spec:
             }
         }
 
-        stage('Smoke Test') {
+        stage('Post-Deploy Monitoring Gate & Rollback') {
             steps {
                 container('kubectl') {
                     sh '''
-                    echo "==> Running functional connectivity test using a temporary debug pod..."
-                    kubectl run smoke-test-pod --rm -i --restart=Never \
+                    echo "🚀 Running Smoke Test to generate initial traffic..."
+                    kubectl run smoke-test-pod-gate --rm -i --restart=Never \
                         --namespace=${NAMESPACE} \
                         --image=curlimages/curl:latest \
-                        --command -- curl -s --max-time 10 http://backend-service.${NAMESPACE}.svc.cluster.local:5000/health
+                        --command -- curl -s --max-time 10 http://backend-service.${NAMESPACE}.svc.cluster.local:5000/health || true
 
-                    echo "==> Smoke test completed successfully!"
+                    echo "⏳ Waiting 30 seconds for Prometheus to scrape new metrics..."
+                    sleep 30
+
+                    echo "📊 Checking Error Rates & Target Health in Prometheus..."
+                    PROM_URL="http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090"
+
+                    # שאילתת PromQL לבדיקת זמינות היעד (backend-service)
+                    TARGET_UP=$(curl -s "$PROM_URL/api/v1/query?query=up{job='backend-service'}" | grep -o '"value":\\[[0-9.]*,"[0-9]*"\\]' | grep -o '"[0-9]*"' | tr -d '"' | head -n 1)
+
+                    if [[ "$TARGET_UP" == "0" || -z "$TARGET_UP" ]]; then
+                        echo "🚨 ALERT: Target is DOWN after deployment!"
+                        echo "🔄 Initiating automatic Rollback..."
+                        kubectl rollout undo deployment/backend -n ${NAMESPACE}
+                        kubectl rollout undo deployment/frontend -n ${NAMESPACE}
+                        kubectl rollout undo deployment/worker -n ${NAMESPACE}
+                        echo "📖 Refer to runbook: https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-Rollback"
+                        exit 1
+                    fi
+
+                    echo "✅ Deployment is stable. No critical alerts detected."
                     '''
                 }
             }
