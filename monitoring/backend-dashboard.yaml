@@ -1,50 +1,152 @@
----
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: backend-dashboard
   namespace: observability
   labels:
-    grafana_dashboard: "1"  # ה-Label שה-Sidecar מחפש!
+    grafana_dashboard: "1"
 data:
-  backend-metrics.json: |-
+  backend-dashboard.json: |-
     {
-      "title": "Application Backend Metrics",
-      "tags": ["backend", "app"],
+      "title": "Application Overview (Page 3 SLI/SLO)",
+      "uid": "app-overview-v1",
+      "tags": [
+        "application",
+        "backend"
+      ],
       "timezone": "browser",
+      "refresh": "5s",
       "panels": [
         {
-          "title": "Requests Per Second (RPS)",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-          "targets": [
-            {
-              "expr": "sum(rate(http_requests_total{job=\"backend-service\"}[5m]))",
-              "legendFormat": "RPS"
-            }
-          ]
-        },
-        {
-          "title": "Error Rate (5xx/4xx)",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-          "targets": [
-            {
-              "expr": "sum(rate(http_requests_total{job=\"backend-service\", status=~\"[45]..\"}[5m]))",
-              "legendFormat": "Errors"
-            }
-          ]
-        },
-        {
-          "title": "Average Latency (Seconds)",
+          "title": "Availability (SLO: 99%)",
           "type": "gauge",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "gridPos": {
+            "h": 7,
+            "w": 6,
+            "x": 0,
+            "y": 0
+          },
           "targets": [
             {
-              "expr": "sum(rate(http_request_duration_seconds_sum{job=\"backend-service\"}[5m])) / sum(rate(http_request_duration_seconds_count{job=\"backend-service\"}[5m]))",
-              "legendFormat": "Latency"
+              "expr": "sum(rate(flask_http_request_total{status=~\"2..|3..\"}[5m])) / sum(rate(flask_http_request_total[5m]))",
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.95
+                  },
+                  {
+                    "color": "green",
+                    "value": 0.99
+                  }
+                ]
+              },
+              "unit": "percentunit"
+            }
+          }
+        },
+        {
+          "title": "Latency p95 & p99",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 7,
+            "w": 18,
+            "x": 6,
+            "y": 0
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "p95 Latency",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "p99 Latency",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "color": {
+                "mode": "palette-classic"
+              }
+            }
+          }
+        },
+        {
+          "title": "Traffic & Errors (5xx Rate)",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 7
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(flask_http_request_total[1m]))",
+              "legendFormat": "Total Requests / sec",
+              "refId": "A"
+            },
+            {
+              "expr": "sum(rate(flask_http_request_total{status=~\"5..\"}[1m]))",
+              "legendFormat": "5xx Errors / sec",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10
+              }
+            }
+          }
+        },
+        {
+          "title": "Business Metrics: Infrastructure Provisioning",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 7
+          },
+          "targets": [
+            {
+              "expr": "business_infra_created_total",
+              "legendFormat": "Instances Created",
+              "refId": "A"
+            },
+            {
+              "expr": "business_infra_deleted_total",
+              "legendFormat": "Instances Deleted",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "bars",
+                "lineWidth": 1,
+                "fillOpacity": 80
+              }
+            }
+          }
         }
       ]
     }
