@@ -110,19 +110,26 @@ spec:
                         --image=curlimages/curl:latest \
                         --command -- curl -s --max-time 10 http://backend-service.${NAMESPACE}.svc.cluster.local:5000/health || true
 
-                    echo "⏳ Waiting 30 seconds for Prometheus to scrape new metrics..."
-                    sleep 30
-
-                    echo "📊 Checking Error Rates & Target Health in Prometheus..."
+                    echo "⏳ Waiting for Prometheus to scrape target (polling up to 90s)..."
                     PROM_URL="http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090"
+                    TARGET_UP="0"
 
-                    # בדיקת זמינות של יעדי האפליקציה ב-namespace
-                    TARGET_UP=$(curl -s "$PROM_URL/api/v1/query?query=max(up{namespace='${NAMESPACE}'})" | jq -r '.data.result[0].value[1] // "0"')
+                    # לולאה שבודקת כל 10 שניות, עד 9 פעמים (סה"כ 90 שניות)
+                    for i in {1..9}; do
+                        sleep 10
 
-                    echo "Prometheus Target Status: $TARGET_UP"
+                        # שימוש ב-G ו-data-urlencode כדי לשלוח את השאילתה בצורה בטוחה
+                        TARGET_UP=$(curl -s -G "$PROM_URL/api/v1/query" --data-urlencode "query=max(up{namespace='${NAMESPACE}'} or up{kubernetes_namespace='${NAMESPACE}'} or up{job=~'.*backend.*'})" | jq -r '.data.result[0].value[1] // "0"')
+
+                        if [[ "$TARGET_UP" == "1" ]]; then
+                            echo "✅ Prometheus detected target as UP!"
+                            break
+                        fi
+                        echo "⏱️ Attempt $i/9: Target not ready in Prometheus yet. Waiting..."
+                    done
 
                     if [[ "$TARGET_UP" != "1" ]]; then
-                        echo "🚨 ALERT: Target is DOWN or unreachable after deployment! (Value: $TARGET_UP)"
+                        echo "🚨 ALERT: Target is DOWN or unreachable in Prometheus!"
                         echo "🔄 Initiating automatic Rollback..."
                         kubectl rollout undo deployment/backend -n ${NAMESPACE}
                         kubectl rollout undo deployment/frontend -n ${NAMESPACE}
