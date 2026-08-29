@@ -304,7 +304,8 @@ def index():
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT id, name, status FROM mission_data WHERE id > 4 ORDER BY id DESC;")
+                # התיקון כאן: הוסר ה- WHERE id > 4
+                cur.execute("SELECT id, name, status FROM mission_data ORDER BY id DESC;")
                 db_rows = cur.fetchall()
                 for r in db_rows:
                     try:
