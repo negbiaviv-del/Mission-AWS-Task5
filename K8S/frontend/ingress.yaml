@@ -14,10 +14,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - a80ea005d68e04a0395947b28e7eb895-260917344.us-east-1.elb.amazonaws.com
+        - a7fb3a294c50447a0972f3f72f6a2f17-1999178887.us-east-1.elb.amazonaws.com
       secretName: mission-tls
   rules:
-    - host: a80ea005d68e04a0395947b28e7eb895-260917344.us-east-1.elb.amazonaws.com
+    - host: a7fb3a294c50447a0972f3f72f6a2f17-1999178887.us-east-1.elb.amazonaws.com
       http:
         paths:
           - path: /
