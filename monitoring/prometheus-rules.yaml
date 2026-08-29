@@ -1,0 +1,77 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mission-alerts
+  namespace: observability
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+  - name: application-alerts
+    rules:
+    - alert: HighErrorRate
+      expr: sum(rate(flask_http_request_total{status=~"5.."}[5m])) / sum(rate(flask_http_request_total[5m])) > 0.05
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "High 5xx error rate on {{ $labels.job }}"
+        description: "The application is returning 5xx errors for more than 5% of requests over the last 5 minutes."
+        runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-HighErrorRate"
+
+    - alert: HighLatencyP95
+      expr: histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le)) > 1.0
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High latency (p95) on {{ $labels.job }}"
+        description: "The 95th percentile latency is taking longer than 1 second."
+        runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-HighLatency"
+
+  - name: kubernetes-alerts
+    rules:
+    - alert: ReplicasMismatch
+      expr: kube_deployment_spec_replicas{namespace="devops-app"} != kube_deployment_status_replicas_available{namespace="devops-app"}
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Deployment replicas mismatch in {{ $labels.deployment }}"
+        description: "Desired replicas do not match available replicas in the devops-app namespace."
+        runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-ReplicasMismatch"
+
+    - alert: NodeNotReady
+      expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Kubernetes Node {{ $labels.node }} is NotReady"
+        description: "A node has been in a NotReady state or experiencing resource pressure for over 5 minutes."
+        runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-NodeNotReady"
+
+  - name: jenkins-alerts
+    rules:
+    - alert: JenkinsQueueStuck
+      expr: default_jenkins_builds_queue_size > 5
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Jenkins queue is stuck"
+        description: "More than 5 jobs are waiting in the Jenkins queue for over 10 minutes."
+        runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-JenkinsQueue"
+
+  - name: monitoring-alerts
+    rules:
+    - alert: PrometheusTargetDown
+      expr: up == 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Monitoring target {{ $labels.instance }} is down"
+        description: "Prometheus cannot scrape target {{ $labels.instance }} (job: {{ $labels.job }})."
+        runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-TargetDown"
