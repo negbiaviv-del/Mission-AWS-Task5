@@ -77,7 +77,7 @@ spec:
                         }
                     }
                 }
-                stage('Observability (Page 4)') {
+                stage('Observability configs') {
                     steps {
                         container('python') {
                             sh '''
