@@ -158,7 +158,7 @@ controller:
       setup-jenkins: |
         jobs:
           - script: >
-              pipelineJob('ci-application') {
+              pipelineJob('Application - CI') {
                   description('CI Pipeline - Builds Docker images and pushes to ECR')
                   definition {
                       cpsScm {
@@ -176,7 +176,7 @@ controller:
                   }
               }
           - script: >
-              pipelineJob('application-cd') {
+              pipelineJob('Application - CD') {
                   description('CD Pipeline - Deploys a specific image tag to EKS')
                   parameters {
                       stringParam('IMAGE_TAG', '', 'The unique image tag to deploy')

@@ -30,14 +30,14 @@ This project presents an advanced, secure, and distributed cloud architecture us
 ## 🚀 The CI/CD Pipeline (Separation of Concerns)
 Following best practices, the pipeline is strictly divided into two separate processes:
 
-### 1. Continuous Integration (`application-ci`)
+### 1. Continuous Integration (`Application - CD`)
 Triggered automatically by a GitHub Webhook upon a push to the repository.
 * **Checkout & Validation:** Fetches code and validates Dockerfiles and manifests.
 * **Linting & Tests:** Runs static code analysis and basic unit tests.
 * **Build & Tag:** Builds Docker images for the Frontend, Backend, and Worker using a dynamic, immutable `IMAGE_TAG` based on the short Git commit SHA (No `:latest` tags).
 * **Push & Publish:** Pushes images securely to AWS ECR and passes the unique `IMAGE_TAG` as a parameter to the CD pipeline.
 
-### 2. Continuous Deployment (`application-cd`)
+### 2. Continuous Deployment (`Application - CD`)
 Triggered downstream by the CI pipeline. **It does not build code.**
 * **Input Validation:** Verifies the received `IMAGE_TAG` exists in the ECR registry.
 * **Manifest Validation:** Runs `helm template` or `kubectl dry-run` to validate K8s syntax.
@@ -115,14 +115,14 @@ Run the automated deployment script. This script fetches the required AWS secret
    * **Username:** `admin`
    * **Password:** (Check your terminal output)
 3. **Verify Observability:** Access Prometheus (`http://localhost:9090/targets`) and ensure that both `backend-monitor` and `jenkins-monitor` targets are in an `UP` state.
-4. **Trigger CI/CD:** Push a commit to the GitHub repository. Watch the `application-ci` job spin up an Agent Pod, build the images, and automatically trigger `application-cd` for deployment.
+4. **Trigger CI/CD:** Push a commit to the GitHub repository. Watch the `Application - CI` job spin up an Agent Pod, build the images, and automatically trigger `Application - CD` for deployment.
 
 ---
 
 ## ⏪ Failure Handling & Rollback
 * **CI Failures:** If tests or builds fail, the image is not pushed, and the CD pipeline is not triggered.
 * **CD Failures:** If the deployment fails validation, no changes are made to the cluster. If the `kubectl rollout status` fails or the Smoke Test fails, the CD pipeline stops.
-* **Rollback Procedure:** To rollback to a previous stable version, manually trigger the `application-cd` pipeline from the Jenkins UI and provide the previous known-good `IMAGE_TAG` (Git SHA) as the build parameter. The CD pipeline will gracefully re-deploy the older, verified image.
+* **Rollback Procedure:** To rollback to a previous stable version, manually trigger the `Application - CD` pipeline from the Jenkins UI and provide the previous known-good `IMAGE_TAG` (Git SHA) as the build parameter. The CD pipeline will gracefully re-deploy the older, verified image.
 
 ---
 
