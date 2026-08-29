@@ -289,13 +289,7 @@ def get_db_connection():
 # --- הוספת נתיב Healthcheck חכם ---
 @app.route('/health')
 def health_check():
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1;")
-        return jsonify({"status": "healthy", "db": "connected"}), 200
-    except Exception as e:
-        return jsonify({"status": "unhealthy", "error": str(e)}), 503
+    return jsonify({"status": "broken", "message": "intentional failure for CD drill"}), 500
 
 @app.route('/')
 def index():
