@@ -254,15 +254,6 @@ done
 echo "🔑 Extracting Jenkins Admin Password..."
 JENKINS_PASSWORD=$(kubectl exec --namespace jenkins -it svc/jenkins -c jenkins -- /bin/cat /run/secrets/additional/chart-admin-password | tr -d '\r')
 
-echo ""
-echo "======================================================"
-echo "🚀 JENKINS IS SUCCESSFULLY INSTALLED AND EXPOSED!"
-echo "======================================================"
-echo "👤 Username : admin"
-echo "🔑 Password : $JENKINS_PASSWORD"
-echo "🌐 URL      : http://$JENKINS_URL:8080"
-echo "======================================================"
-
 echo "===> Automating GitHub Webhook creation..."
 curl -s -X POST -H "Accept: application/vnd.github.v3+json" \
   -H "Authorization: token $GITHUB_TOKEN" \
@@ -280,3 +271,12 @@ curl -s -X POST -H "Accept: application/vnd.github.v3+json" \
     }
   }'
 echo -e "\n===> GitHub Webhook created successfully!"
+
+echo ""
+echo "======================================================"
+echo "🚀 JENKINS IS SUCCESSFULLY INSTALLED AND EXPOSED!"
+echo "======================================================"
+echo "👤 Username : admin"
+echo "🔑 Password : $JENKINS_PASSWORD"
+echo "🌐 URL      : http://$JENKINS_URL:8080"
+echo "======================================================"
