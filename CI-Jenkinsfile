@@ -88,9 +88,12 @@ spec:
                             echo "📦 Installing curl..."
                             apt-get update && apt-get install -y curl
 
+                            echo "🔍 Extracting Prometheus rules from Kubernetes CRD..."
+                            python -c 'import yaml; doc = yaml.safe_load(open("monitoring/prometheus-rules.yaml")); yaml.dump(doc.get("spec", {}), open("monitoring/pure-rules.yaml", "w"))'
+
                             echo "🔍 Validating Prometheus Rules..."
                             curl -s -L https://github.com/prometheus/prometheus/releases/download/v2.45.0/prometheus-2.45.0.linux-amd64.tar.gz | tar xz
-                            ./prometheus-2.45.0.linux-amd64/promtool check rules monitoring/prometheus-rules.yaml
+                            ./prometheus-2.45.0.linux-amd64/promtool check rules monitoring/pure-rules.yaml
 
                             echo "✅ Observability configs are valid!"
                             '''
