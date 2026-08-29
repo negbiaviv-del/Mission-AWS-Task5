@@ -51,7 +51,7 @@ spec:
                     sh '''
                     if ! command -v kubectl &> /dev/null; then
                         echo "Installing kubectl..."
-                        apk add --no-cache curl
+                        apk add --no-cache curl jq
                         curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
                         chmod +x kubectl
                         mv kubectl /usr/local/bin/kubectl
@@ -102,6 +102,8 @@ spec:
             steps {
                 container('kubectl') {
                     sh '''
+                    apk add --no-cache jq curl
+
                     echo "🚀 Running Smoke Test to generate initial traffic..."
                     kubectl run smoke-test-pod-gate --rm -i --restart=Never \
                         --namespace=${NAMESPACE} \
@@ -114,11 +116,11 @@ spec:
                     echo "📊 Checking Error Rates & Target Health in Prometheus..."
                     PROM_URL="http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090"
 
-                    # שאילתת PromQL לבדיקת זמינות היעד (backend-service)
-                    TARGET_UP=$(curl -s "$PROM_URL/api/v1/query?query=up{job='backend-service'}" | grep -o '"value":\\[[0-9.]*,"[0-9]*"\\]' | grep -o '"[0-9]*"' | tr -d '"' | head -n 1)
+                    # קריאת JSON נקייה ובטוחה בעזרת jq
+                    TARGET_UP=$(curl -s "$PROM_URL/api/v1/query?query=up{job='backend-service'}" | jq -r '.data.result[0].value[1] // "0"')
 
-                    if [[ "$TARGET_UP" == "0" || -z "$TARGET_UP" ]]; then
-                        echo "🚨 ALERT: Target is DOWN after deployment!"
+                    if [[ "$TARGET_UP" != "1" ]]; then
+                        echo "🚨 ALERT: Target is DOWN or unreachable after deployment! (Value: $TARGET_UP)"
                         echo "🔄 Initiating automatic Rollback..."
                         kubectl rollout undo deployment/backend -n ${NAMESPACE}
                         kubectl rollout undo deployment/frontend -n ${NAMESPACE}

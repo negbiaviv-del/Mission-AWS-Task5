@@ -152,7 +152,7 @@ spec:
         stage('Trigger CD') {
             steps {
                 echo "Triggering CD Pipeline with IMAGE_TAG: ${IMAGE_TAG}"
-                build job: 'application-cd', parameters: [
+                build job: 'Application - CD', parameters: [
                     string(name: 'IMAGE_TAG', value: "${IMAGE_TAG}")
                 ], wait: false
             }
