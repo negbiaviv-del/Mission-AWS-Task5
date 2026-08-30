@@ -154,7 +154,11 @@ kubectl exec -n $NAMESPACE $BACKEND_POD -- python setup_db.py || echo "⚠️ DB
 echo "⏳ Waiting for Backend Pods to become Ready..."
 kubectl rollout status deployment/backend -n $NAMESPACE --timeout=90s
 
-echo "🎉 Automation completed successfully! Access your app securely at: https://$LB_HOSTNAME"
-echo "🔑 Ingress Basic Auth Credentials:"
-echo "Username: admin"
-echo "Password: $GENERATED_PASSWORD"
+echo ""
+echo "=================================================================================="
+echo "🎉 AUTOMATION COMPLETED SUCCESSFULLY! APP IS EXPOSED"
+echo "=================================================================================="
+echo "🌐 URL      : https://$LB_HOSTNAME"
+echo "👤 Username : admin"
+echo "🔑 Password : $GENERATED_PASSWORD"
+echo "=================================================================================="
