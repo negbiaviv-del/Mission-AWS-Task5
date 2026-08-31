@@ -4,16 +4,17 @@ metadata:
   name: devops-app-alerts
   namespace: observability
   labels:
-    release: kube-prometheus-stack # <-- הלייבל שחסר כדי שפרומתיאוס יקרא את זה
+    app: kube-prometheus-stack
+    release: kube-prometheus-stack
 spec:
   groups:
   - name: application-alerts
     rules:
     - alert: HighErrorRate
       expr: |
-        sum(rate(http_requests_total{status=~"5.."}[5m]))
+        sum(rate(flask_http_request_total{status=~"5.."}[5m]))
         /
-        sum(rate(http_requests_total[5m])) > 0.1
+        sum(rate(flask_http_request_total[5m])) > 0.1
       for: 1m
       labels:
         severity: critical

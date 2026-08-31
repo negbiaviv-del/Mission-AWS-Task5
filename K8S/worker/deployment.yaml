@@ -46,11 +46,3 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "250m"
-          livenessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - ps aux | grep '[w]orker_sqs.py'
-            initialDelaySeconds: 15
-            periodSeconds: 20

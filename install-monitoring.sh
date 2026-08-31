@@ -62,10 +62,13 @@ EOF
 echo "===> Applying Backend ServiceMonitor..."
 kubectl apply -f monitoring/app-monitor.yaml
 
-# --- תוספת 2: הזרקת הדאשבורדים אוטומטית למערכת ---
+# --- תוספת 2: הזרקת הדאשבורדים וההתראות אוטומטית למערכת ---
 echo "===> Injecting Grafana Dashboards as Code..."
 kubectl apply -f monitoring/backend-dashboard.yaml
 kubectl apply -f monitoring/jenkins-dashboard.yaml
+
+echo "===> Applying Application Alerts (PrometheusRules)..."
+kubectl apply -f monitoring/app-alerts.yaml
 
 # --- תוספת 3: אבטחת רשת ---
 echo "===> Applying Strict NetworkPolicies for Observability..."
