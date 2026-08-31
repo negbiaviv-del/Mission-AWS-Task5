@@ -108,7 +108,13 @@ Run the automated deployment script. This script fetches the required AWS secret
     chmod +x install-jenkins.sh
     ./install-jenkins.sh
 
-### 4. Verification & Testing
+### 4. Application Deployment
+Deploy the 3-tier application to the Kubernetes cluster and expose it securely via an AWS LoadBalancer. This automated script sets up the application manifests, configures the Ingress, and outputs the final application URL along with the securely generated Basic Auth credentials.
+
+    chmod +x deploy-app.sh
+    ./deploy-app.sh
+
+### 5. Verification & Testing
 1. **Access Jenkins:** Use the credentials provisioned by JCasC to log into the Jenkins UI (URL provided by the install script).
 2. **Access the Application:** Navigate to the Application Load Balancer URL. The environment is secured via Ingress Basic Authentication.
    The dynamically generated password is printed securely in the terminal output upon successful completion of the deployment script.
