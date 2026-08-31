@@ -1,0 +1,23 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: devops-app-alerts
+  namespace: observability
+  labels:
+    release: kube-prometheus-stack # <-- הלייבל שחסר כדי שפרומתיאוס יקרא את זה
+spec:
+  groups:
+  - name: application-alerts
+    rules:
+    - alert: HighErrorRate
+      expr: |
+        sum(rate(http_requests_total{status=~"5.."}[5m]))
+        /
+        sum(rate(http_requests_total[5m])) > 0.1
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "High 5xx error rate detected on application"
+        description: "The application is returning 5xx errors for more than 10% of requests over the last 5 minutes."
+        runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-HighErrorRate"
