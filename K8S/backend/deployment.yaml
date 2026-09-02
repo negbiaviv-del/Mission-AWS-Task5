@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
+  name: backend:broken-release-test
   namespace: devops-app
   labels:
     app: backend
