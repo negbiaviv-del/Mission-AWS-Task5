@@ -22,3 +22,13 @@ spec:
         summary: "High 5xx error rate detected on application"
         description: "The application is returning 5xx errors for more than 10% of requests over the last 5 minutes."
         runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-HighErrorRate"
+
+    - alert: JenkinsQueueStuck
+      expr: jenkins_queue_size_value > 0
+      for: 1m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Jenkins Queue is Stuck"
+        description: "There are builds waiting in the Jenkins queue for more than 1 minute. Check if agents are online."
+        runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook#jenkins-queue-stuck"
