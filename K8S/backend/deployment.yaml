@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend:broken-release-test
+  name: backend
   namespace: devops-app
   labels:
     app: backend
@@ -23,7 +23,7 @@ spec:
         fsGroup: 1000
       initContainers:
         - name: init-home
-          image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-backend:latest
+          image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-backend:broken-release-test
           securityContext:
             runAsNonRoot: false
             runAsUser: 0
@@ -39,7 +39,7 @@ spec:
               mountPath: /tmp/newhome
       containers:
         - name: backend
-          image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-backend:latest
+          image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-backend:broken-release-test
           imagePullPolicy: Always
           ports:
             - containerPort: 5000
