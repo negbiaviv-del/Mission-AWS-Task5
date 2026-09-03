@@ -168,7 +168,6 @@ HTML_TEMPLATE = """
                         <th class="p-5 w-10 text-center">
                             <input type="checkbox" id="selectAll" onclick="toggleAll(this)" class="checkbox-custom rounded">
                         </th>
-                        <th class="p-5 font-semibold">ID</th>
                         <th class="p-5 font-semibold">Name</th>
                         <th class="p-5 font-semibold text-center">Instance Type</th>
                         <th class="p-5 font-semibold text-right">Actions</th>
@@ -180,7 +179,6 @@ HTML_TEMPLATE = """
                         <td class="p-5 text-center">
                             <input type="checkbox" class="instance-checkbox checkbox-custom rounded" value="{{ row['id'] }}" onclick="updateBulkDeleteVisibility()">
                         </td>
-                        <td class="p-5 text-gray-400 font-mono">#{{ row['id'] }}</td>
                         <td class="p-5 font-bold text-gray-700">{{ row['name'] }}</td>
                         <td class="p-5 text-center">
                             <span class="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-100 text-green-700 border border-green-200">
@@ -308,8 +306,8 @@ def index():
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # התיקון כאן: הוסר ה- WHERE id > 4
-                cur.execute("SELECT id, name, status FROM mission_data ORDER BY id DESC;")
+                # סינון שורות הטסט (id 1 עד 3) כדי שהמסך יהיה נקי ללקוח בהקמה
+                cur.execute("SELECT id, name, status FROM mission_data WHERE id > 3 ORDER BY id DESC;")
                 db_rows = cur.fetchall()
                 for r in db_rows:
                     try:
@@ -333,7 +331,7 @@ def add_entry():
 
     if name and instance_type:
         try:
-            # התיקון שלנו: חותמת זמן דינמית ואמיתית!
+            # חותמת זמן דינמית ואמיתית
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             full_payload = {
