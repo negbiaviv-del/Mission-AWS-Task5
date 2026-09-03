@@ -10,6 +10,7 @@ spec:
   groups:
   - name: application-alerts
     rules:
+    # --- Application Alerts (2) ---
     - alert: HighErrorRate
       expr: |
         sum(rate(flask_http_request_total{status=~"5.."}[5m]))
@@ -23,6 +24,17 @@ spec:
         description: "The application is returning 5xx errors for more than 10% of requests over the last 5 minutes."
         runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-HighErrorRate"
 
+    - alert: HighLatencyP95
+      expr: histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le)) > 2.0
+      for: 1m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High P95 Latency"
+        description: "95th percentile latency is above 2 seconds."
+        runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-HighLatency"
+
+    # --- Jenkins Alert (1) ---
     - alert: JenkinsQueueStuck
       expr: jenkins_queue_size_value > 0
       for: 1m
@@ -32,3 +44,35 @@ spec:
         summary: "Jenkins Queue is Stuck"
         description: "There are builds waiting in the Jenkins queue for more than 1 minute. Check if agents are online."
         runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook#jenkins-queue-stuck"
+
+    # --- Kubernetes Alerts (2) ---
+    - alert: ReplicasMismatch
+      expr: kube_deployment_spec_replicas{namespace="devops-app"} != kube_deployment_status_replicas_available{namespace="devops-app"}
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Deployment Replicas Mismatch"
+        description: "Available replicas are less than desired replicas in devops-app namespace."
+        runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-ReplicasMismatch"
+
+    - alert: NodeNotReady
+      expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Kubernetes Node Not Ready"
+        description: "A node has been in a NotReady state for more than 2 minutes."
+        runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-NodeNotReady"
+
+    # --- Monitoring Alert (1) ---
+    - alert: PrometheusTargetDown
+      expr: up == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Prometheus Target Down"
+        description: "A Prometheus target has disappeared. An exporter might be down."
+        runbook_url: "https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-TargetDown"

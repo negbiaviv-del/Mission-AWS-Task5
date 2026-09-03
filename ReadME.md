@@ -1,4 +1,4 @@
-![AWS Architecture](Docs/Architecture.jpg)
+![AWS Architecture](evidence/Architecture.jpg)
 
 # Final Project: Automated and Distributed 3-Tier Cloud Infrastructure with Jenkins CI/CD
 
@@ -171,22 +171,40 @@ To validate the successful implementation of the CI/CD pipelines, security measu
 
 ### 1. CI/CD Automation Success
 Full automation from Git push to EKS deployment, including ECR image pushes and automated CD pipeline triggers.
-![CI/CD Dashboard](Docs/Dashboard%20-%20CI:CD.png)
+![CI/CD Dashboard](evidence/Dashboard%20-%20CI:CD.png)
 
 ### 2. Zero-Touch Secrets Management
 Complete integration with AWS Secrets Manager to ensure zero hardcoded credentials or tokens exist within the repository.
 ![AWS Secrets Manager](Docs/AWS%20Secret%20Manager.png)
-![No Passwords](Docs/NO%20Password%20-%20Only%20AWS%20Secret.png)
+![No Passwords](evidence/NO%20Password%20-%20Only%20AWS%20Secret.png)
 
 ### 3. Ephemeral Agents & Isolation
 Implementation of dynamic, short-lived Jenkins agents running Docker-in-Docker (DinD) for secure, isolated build environments.
 ![Ephemeral Agents](Docs/Ephemeral%20Agents.png)
-![PodTemplate](Docs/Console%20Output%20-%20PodTemplate%20.png)
+![PodTemplate](evidence/Console%20Output%20-%20PodTemplate%20.png)
 
 ### 4. DevSecOps (Trivy Vulnerability Scanning)
 Integration of Aqua Trivy into the CI pipeline for automated security scanning of application dependencies and Docker images prior to ECR push.
-![Trivy Scans](Docs/Security%20Scans%20(Trivy).png)
+![Trivy Scans](evidence/Security%20Scans%20(Trivy).png)
 
 ### 5. Kubernetes Network Security (Zero Trust)
 Strict Network Policies applied at the namespace level, including a `default-deny-all` baseline rule to ensure granular, whitelisted traffic control.
-![Network Policies](Docs/NetworkPolicies%20%26%20Namespaces.png)
+![Network Policies](evidence/NetworkPolicies%20%26%20Namespaces.png)
+
+### 6. Observability, Alerts & Reliability
+Complete integration of Prometheus and Grafana for monitoring, along with simulated failure drills proving zero-downtime rollbacks, auto-recovery, and alert firing.
+
+**1. Application Alert: High 5xx Error Rate**
+![High Error Rate Alert](evidence/Prometheus-HighErrorRate-Firing.png)
+![Grafana 5xx Spike](evidence/Grafana-5xx-Error-Spike.png)
+
+**2. Kubernetes Auto-Recovery (Pod Deletion)**
+![Pod Recovery](evidence/Terminal-Pod-Recovery.png)
+
+**3. CI/CD Alert: Jenkins Queue Stuck**
+![Jenkins Queue Alert](evidence/Alert-JenkinsQueueStuck-Firing.png)
+
+**4. CD Pipeline Failure Detection & Zero-Downtime Rollback**
+![Failed Release Pipeline](evidence/Pipeline-Failed-Release.png)
+![CD Rollback Stage](evidence/CD-Rollback-Stage.png)
+![Zero Downtime - K8s Rollback](evidence/K8s-Zero-Downtime.png)
