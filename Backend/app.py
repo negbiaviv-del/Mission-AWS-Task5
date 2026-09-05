@@ -76,7 +76,7 @@ HTML_TEMPLATE = """
             </div>
         </div>
         <div class="flex items-center gap-4 bg-white px-6 py-3 rounded-full shadow-sm border border-gray-100">
-            <span class="text-gray-700 font-medium">Welcome, Lorin Negbi 👋</span>
+            <span class="text-gray-700 font-medium">Welcome, Aviv Negbi 👋</span>
             <div class="h-6 w-px bg-gray-200 mx-2"></div>
             <button class="text-gray-600 hover:text-brand flex items-center gap-2 text-sm font-semibold">
                 <i class="fa-solid fa-user"></i> My Profile
