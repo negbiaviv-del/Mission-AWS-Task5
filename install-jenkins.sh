@@ -3,6 +3,8 @@ set -e
 
 GITHUB_REPO_URL="https://github.com/negbiaviv-del/Mission-AWS-Task5.git"
 
+# === 1. שליפת הרשאות גיט מ-AWS ===
+# מתחבר לשירות AWS Secrets Manager כדי לשלוף באופן מאובטח את השם והסיסמה (טוקן) של GitHub שלך. זה מונע כתיבת סיסמאות גלויות בקוד.
 echo "======================================================"
 echo "🔐 Fetching GitHub credentials securely from AWS Secrets Manager..."
 echo "======================================================"
@@ -19,6 +21,8 @@ fi
 echo "✅ GitHub credentials successfully loaded from AWS!"
 echo "======================================================"
 
+# === 2. יצירת סביבה והגדרות רשת (RBAC) לג'נקינס ===
+# יוצר תיקייה חדשה, מכין קובץ ליצירת סביבה (Namespace) ייעודית לג'נקינס, ומכין קובץ הרשאות (RBAC) שנותן לג'נקינס אישור לנהל פודים, סודות, ושירותים בקלאסטר.
 echo "==> Creating Jenkins directory..."
 mkdir -p jenkins
 
@@ -67,6 +71,8 @@ subjects:
     namespace: jenkins
 EOF
 
+# === 3. חיבור ג'נקינס למערכת הניטור (פרומיתיאוס) ===
+# מייצר ServiceMonitor שמנחה את פרומיתיאוס לזהות אוטומטית את ג'נקינס ולשאוב ממנו מטריקות ניטור (כדי שנוכל לראות את מצב ג'נקינס בגרפאנה).
 echo "==> Generating Jenkins ServiceMonitor for Prometheus..."
 cat << 'EOF' > jenkins/jenkins-monitor.yaml
 apiVersion: monitoring.coreos.com/v1
@@ -90,6 +96,8 @@ spec:
       interval: 30s
 EOF
 
+# === 4. קינפוג אוטומטי של ג'נקינס (JCasC) ===
+# מכין את קובץ ההגדרות הראשי להתקנת ג'נקינס: אומר לו להשתמש בדיסק קשיח בענן (gp2), מתקין פלאגינים, טוען את הסיסמאות של גיט ו-AWS, ויוצר מראש את שני הצינורות שלנו (CI ו-CD).
 echo "==> Generating Jenkins Helm values (JCasC)..."
 cat << 'EOF' > jenkins/jenkins-values.yaml
 controller:
@@ -198,6 +206,8 @@ controller:
               }
 EOF
 
+# === 5. יישום ההגדרות וניקוי התקנות קודמות ===
+# מפעיל את קבצי ההגדרות (Namespace, RBAC, Monitoring) בקלאסטר, מגדיר את סוג הכונן ב-AWS כדיפולטיבי, ומוחק שאריות מג'נקינס ישן אם היה כזה.
 echo "==> Applying Namespace, RBAC, and ServiceMonitor..."
 kubectl apply -f jenkins/jenkins-namespace.yaml
 kubectl apply -f jenkins/jenkins-rbac.yaml
@@ -212,6 +222,8 @@ kubectl delete statefulset jenkins -n jenkins --ignore-not-found
 kubectl delete pvc jenkins -n jenkins --ignore-not-found
 kubectl delete svc jenkins -n jenkins --ignore-not-found
 
+# === 6. שמירת הרשאות בסודות (Secrets) של קוברנטיס ===
+# מושך את הרשאות ה-AWS של המחשב שמריץ את הסקריפט, ושומר אותן יחד עם הרשאות הגיט בתוך קוברנטיס כ-Secrets, כדי שג'נקינס יוכל להשתמש בהן באבטחה מלאה.
 echo "==> Fetching AWS Credentials from local environment..."
 AWS_ACCESS_KEY=$(aws configure get aws_access_key_id)
 AWS_SECRET_KEY=$(aws configure get aws_secret_access_key)
@@ -229,6 +241,8 @@ kubectl create secret generic github-credentials-secret \
   --from-literal=github_token="$GITHUB_TOKEN" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+# === 7. התקנת ג'נקינס והמתנה לעלייה שלו ===
+# מתקין את ג'נקינס באמצעות מנהל החבילות Helm, מחכה שהפודים יעלו, ואז ממתין ש-AWS תעניק לג'נקינס כתובת ציבורית (DNS) ומחלץ את סיסמת מנהל המערכת.
 echo "==> Installing Jenkins via Helm..."
 helm repo add jenkinsci https://charts.jenkins.io || true
 helm repo update
@@ -254,6 +268,8 @@ done
 echo "🔑 Extracting Jenkins Admin Password..."
 JENKINS_PASSWORD=$(kubectl exec --namespace jenkins -it svc/jenkins -c jenkins -- /bin/cat /run/secrets/additional/chart-admin-password | tr -d '\r')
 
+# === 8. חיבור לג'יט (Webhook) וווידוא סיום ===
+# פונה דרך ה-API של GitHub כדי להגדיר Webhook - זה אומר שמעכשיו כל דחיפת קוד בגיט תעיר אוטומטית את ג'נקינס בכתובת החדשה. מציג לך את כל פרטי ההתחברות לג'נקינס.
 echo "===> Automating GitHub Webhook creation..."
 curl -s -X POST -H "Accept: application/vnd.github.v3+json" \
   -H "Authorization: token $GITHUB_TOKEN" \
@@ -281,6 +297,8 @@ echo "🔑 Password : $JENKINS_PASSWORD"
 echo "🌐 URL      : http://$JENKINS_URL:8080"
 echo "======================================================"
 
+# === 9. הפעלת הרצת צינור (CI Build) ראשונה אוטומטית ===
+# נכנס לג'נקינס דרך שורת הפקודה, מושך "אישור אבטחה" (Crumb ו-Cookie), ומריץ אוטומטית בפעם הראשונה את פייפליין ה-CI כדי לוודא שהמערכת כולה באוויר ועובדת.
 echo ""
 echo "===> Triggering the first CI build automatically..."
 sleep 10

@@ -4,11 +4,12 @@ set -e
 CLUSTER_NAME="aviv-mission-cluster"
 REGION="us-east-1"
 
+# === 1. הכנת תשתית וחיבור לקלאסטר ===
+# מעדכן את הרשאות הגישה המקומיות כדי שנוכל לדבר עם הקלאסטר של EKS באמזון. מתקין את התוסף aws-ebs-csi-driver, שמאפשר לקוברנטיס ליצור ולנהל כוננים קשיחים וירטואליים (EBS) ב-AWS באופן אוטומטי (קריטי לשמירת נתונים - Retention).
 echo "======================================================"
 echo "⚙️ Preparing EKS Cluster for Observability Stack..."
 echo "======================================================"
 
-# --- תוספת 1: חיבור אוטומטי לקלאסטר ---
 echo "===> Updating Kubeconfig automatically..."
 aws eks update-kubeconfig --region $REGION --name $CLUSTER_NAME
 
@@ -19,15 +20,18 @@ aws eks create-addon \
   --region $REGION \
   --resolve-conflicts OVERWRITE || echo "EBS CSI Driver already exists or is updating."
 
-# נותנים לדרייבר כמה שניות לעלות לפני שמבקשים ממנו דיסקים
 sleep 15
 
+# === 2. ניקוי והכנת הסביבה לניטור ===
+# מסיר התקנות קודמות של מערכת הניטור אם יש כאלה (כדי למנוע התנגשויות), ויוצר סביבה (Namespace) חדשה בשם observability שבה נתקין את כל רכיבי הניטור.
 echo "===> Cleaning up any previous/stuck Helm releases..."
 helm uninstall kube-prometheus-stack -n observability --ignore-not-found --wait || true
 
 echo "===> Creating namespace: observability"
 kubectl create namespace observability --dry-run=client -o yaml | kubectl apply -f -
 
+# === 3. התקנת חבילת הניטור (Prometheus + Grafana) ===
+# מוסיף את המאגר הרשמי של Prometheus ומתקין את כל החבילה (Prometheus, Grafana, Alertmanager) במכה אחת בעזרת Helm, תוך שימוש בקובץ הגדרות מותאם אישית (prometheus-values.yaml).
 echo "===> Adding Prometheus Community Helm repo..."
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
@@ -37,6 +41,8 @@ helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheu
   --namespace observability \
   -f monitoring/prometheus-values.yaml
 
+# === 4. יצירת סרוויס מוניטור (ServiceMonitor) ===
+# מייצר קובץ שמנחה את פרומיתיאוס לזהות אוטומטית פודים עם התגית `app: backend` ב-Namespace של האפליקציה, ולהתחיל לשאוב מהם מטריקות בנתיב `/metrics` כל 15 שניות (Service Discovery).
 echo "===> Generating Backend ServiceMonitor for Prometheus..."
 cat << 'EOF' > monitoring/app-monitor.yaml
 apiVersion: monitoring.coreos.com/v1
@@ -62,7 +68,8 @@ EOF
 echo "===> Applying Backend ServiceMonitor..."
 kubectl apply -f monitoring/app-monitor.yaml
 
-# --- תוספת 2: הזרקת הדאשבורדים וההתראות אוטומטית למערכת ---
+# === 5. הזרקת לוחות בקרה והתראות ===
+# מעלה אוטומטית לגרפאנה דאשבורדים מוכנים מראש (Dashboards as Code) עבור האפליקציה וג'נקינס. בנוסף, מעלה כללי התראות (Alerts) שיקפיצו שגיאות אם משהו קורס.
 echo "===> Injecting Grafana Dashboards as Code..."
 kubectl apply -f monitoring/backend-dashboard.yaml
 kubectl apply -f monitoring/jenkins-dashboard.yaml
@@ -70,7 +77,8 @@ kubectl apply -f monitoring/jenkins-dashboard.yaml
 echo "===> Applying Application Alerts (PrometheusRules)..."
 kubectl apply -f monitoring/app-alerts.yaml
 
-# --- תוספת 3: אבטחת רשת ---
+# === 6. אבטחת רשת ומשיכת כתובת לגרפאנה ===
+# מפעיל חוקי רשת (NetworkPolicies) כדי לבודד ולהגן על סביבת הניטור. לאחר מכן, ממתין ש-AWS תעניק לגרפאנה כתובת גישה חיצונית (Load Balancer URL) כדי שנוכל להיכנס אליה דרך הדפדפן.
 echo "===> Applying Strict NetworkPolicies for Observability..."
 kubectl apply -f monitoring/observability-network-policy.yaml
 
@@ -82,7 +90,8 @@ done
 
 GRAFANA_URL=$(kubectl get svc kube-prometheus-stack-grafana -n observability -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 
-# משיכת הסיסמה הדינמית ישירות למשתנה בתוך הסקריפט
+# === 7. חילוץ סיסמה והדפסת פרטי גישה ===
+# שולף מתוך הסודות (Secrets) של קוברנטיס את הסיסמה המאובטחת שנוצרה לגרפאנה, ומדפיס למסך את הכתובת, שם המשתמש והסיסמה כדי שתוכל להתחבר מיד.
 GRAFANA_PASSWORD=$(kubectl get secret -n observability kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
 
 echo "======================================================"
@@ -92,6 +101,5 @@ echo "🌍 Grafana is now automatically exposed to the internet via AWS LoadBala
 echo "URL: http://$GRAFANA_URL"
 echo ""
 echo "Username: admin"
-# מדפיסים את הסיסמה בתוך סוגריים מרובעים כדי שיהיה קל להעתיק אותה בלי רווחים בטעות
 echo "Password: [$GRAFANA_PASSWORD]"
 echo "======================================================"
