@@ -280,3 +280,24 @@ echo "👤 Username : admin"
 echo "🔑 Password : $JENKINS_PASSWORD"
 echo "🌐 URL      : http://$JENKINS_URL:8080"
 echo "======================================================"
+
+echo ""
+echo "===> Triggering the first CI build automatically..."
+sleep 10
+
+# יצירת קובץ זמני לשמירת ה-Session Cookie
+COOKIE_JAR=$(mktemp)
+
+# משיכת ה-Crumb ושמירת ה-Cookie באמצעות הסיסמה שחולצה באופן דינמי
+CRUMB=$(curl -s -c "$COOKIE_JAR" -u "admin:${JENKINS_PASSWORD}" "http://${JENKINS_URL}:8080/crumbIssuer/api/xml?xpath=concat(//crumbRequestField,\":\",//crumb)")
+
+# הרצת הג'וב תוך כדי שליחת ה-Crumb וה-Cookie יחד
+if [[ "$CRUMB" == Jenkins-Crumb:* ]]; then
+    curl -s -X POST -b "$COOKIE_JAR" -u "admin:${JENKINS_PASSWORD}" -H "$CRUMB" "http://${JENKINS_URL}:8080/job/Application%20-%20CI/build"
+    echo -e "\n✅ First build triggered successfully! Check the Jenkins UI."
+else
+    echo -e "\n⚠️ Could not fetch valid Jenkins crumb. Please trigger the first build manually."
+fi
+
+# ניקוי הקובץ הזמני
+rm -f "$COOKIE_JAR"

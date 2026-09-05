@@ -103,7 +103,8 @@ kubectl get secret -n observability kube-prometheus-stack-grafana -o jsonpath="{
 ### 3. Jenkins Bootstrapping (Zero-Touch)
 **Prerequisite:** Ensure a secret named `jenkins-github-auth` is created in AWS Secrets Manager (`us-east-1`) containing your GitHub `username` and `pat` (Personal Access Token).
 
-Run the automated deployment script. This script fetches the required AWS secrets dynamically into memory, applies Helm values and JCasC configurations, and automatically creates the Jenkins CI/CD pipelines without any manual UI interaction:
+Run the automated deployment script. This script fetches the required AWS secrets dynamically, applies Helm values and JCasC configurations, and automatically creates the Jenkins CI/CD pipelines.
+**True Zero-Touch:** Upon successful boot, the script securely extracts the dynamically generated admin password and a CSRF crumb to trigger the first `Application - CI` build via the Jenkins API autonomously.
 
     chmod +x install-jenkins.sh
     ./install-jenkins.sh
@@ -121,7 +122,8 @@ Deploy the 3-tier application to the Kubernetes cluster and expose it securely v
    * **Username:** `admin`
    * **Password:** (Check your terminal output)
 3. **Verify Observability:** Access Prometheus (`http://localhost:9090/targets`) and ensure that both `backend-monitor` and `jenkins-monitor` targets are in an `UP` state.
-4. **Trigger CI/CD:** Push a commit to the GitHub repository. Watch the `Application - CI` job spin up an Agent Pod, build the images, and automatically trigger `Application - CD` for deployment.
+4. **Verify Automated CI/CD:** Since the bootstrapping script triggers the first CI build automatically, navigate to the Jenkins UI immediately after installation to watch the `Application - CI` job spin up an Agent Pod, build the images, and dynamically trigger the `Application - CD` pipeline.
+5. **Clean Production UI:** Once deployed, log into the application to verify the dynamic infrastructure dashboard is fully functional, pristine, and ready for new client input (initial setup verification data is filtered out from the production view). Subsequent CI/CD runs can be tested by pushing new commits to the GitHub repository.
 
 ---
 
