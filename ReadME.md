@@ -60,16 +60,36 @@ Security is enforced at every layer of the CI/CD and Application lifecycles:
 
 ## ⚡ Deployment Instructions
 
-### 1. Infrastructure Provisioning (Terraform)
+### Prerequisites
+1. Ensure a `secrets.auto.tfvars` file containing your `master_db_password` is present in the `Terraform` directory.
+2. Ensure a secret named `jenkins-github-auth` is created in AWS Secrets Manager (`us-east-1`) containing your GitHub `username` and `pat` (Personal Access Token).
+
+---
+
+### 🚀 Option 1: One-Touch Deployment (Recommended)
+For a complete, automated end-to-end deployment, use the provided master script. This wrapper script provisions the infrastructure, installs the monitoring stack, deploys the baseline application, bootstraps Jenkins, triggers the first CI/CD pipeline, and dynamically outputs a summary card with all generated credentials and URLs.
+
+    chmod +x deploy-all-one-touch.sh
+    ./deploy-all-one-touch.sh
+
+*(Upon completion, all dynamic passwords, including Jenkins, Grafana, and the Application UI, will be fetched securely from the cluster and displayed in your terminal).*
+
+---
+
+### 🛠️ Option 2: Step-by-Step Deployment (Manual)
+
+If you prefer to deploy each component individually to observe the process, follow these steps in order:
+
+#### 1. Infrastructure Provisioning (Terraform)
 Provision the AWS backbone, EKS, and core cluster add-ons (Ingress Controller, External Secrets Operator).
-Ensure you have a `secrets.auto.tfvars` file containing your `master_db_password` before applying.
 
     cd Terraform
     terraform init
     terraform apply -auto-approve
+    cd ..
 
-### 2. Observability & Monitoring (Prometheus & Grafana)
-Deploy the complete monitoring stack (`kube-prometheus-stack`) into the `observability` namespace. This script automatically configures the Helm charts and applies the `ServiceMonitor` resources to auto-discover the application and Jenkins metrics:
+#### 2. Observability & Monitoring (Prometheus & Grafana)
+Deploy the complete monitoring stack (`kube-prometheus-stack`) into the `observability` namespace. This script automatically configures the Helm charts and applies the `ServiceMonitor` resources to auto-discover the application and Jenkins metrics.
 
     chmod +x install-monitoring.sh
     ./install-monitoring.sh
@@ -77,53 +97,31 @@ Deploy the complete monitoring stack (`kube-prometheus-stack`) into the `observa
 To easily access the Prometheus UI in the background without blocking your terminal, use the provided helper script:
 
     chmod +x open-prometheus.sh
-    ./open-prometheus.sh
+    ./open-prometheus.sh &
 
-### Accessing Grafana & Dashboards
-The installation process is fully automated. You do not need to set up local port-forwarding.
-The `./install-monitoring.sh` script automatically provisions an AWS LoadBalancer and configures the connection.
+**Observability Operations & Data Recovery:**
+* **Data Retention:** Prometheus is configured with a **15-day** retention policy.
+* **Storage Consumption:** A **20Gi Persistent Volume Claim (PVC)** utilizing the AWS EBS `gp2` storage class is dedicated to Prometheus.
+* **Disaster Recovery:** The metric data is decoupled from the Pod lifecycle via the PVC. If the Prometheus Pod crashes, Kubernetes will automatically spin up a replacement and reattach the existing EBS volume, ensuring **zero data loss**.
 
-At the end of the script execution, the terminal will automatically output:
-1. The **Direct URL** to access Grafana via the AWS LoadBalancer.
-2. The **Username** (`admin`).
-3. The **Dynamically Generated Password**, which the script securely extracts from the Kubernetes secret for you.
-
-*(Fallback: If you clear your terminal and need to retrieve the password again manually, run:)*
-```bash
-kubectl get secret -n observability kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
-```
-
-### Observability Operations & Data Recovery
-* **Data Retention:** Prometheus is configured with a **15-day** retention policy for all scraped metrics.
-* **Storage Consumption:** A **20Gi Persistent Volume Claim (PVC)** utilizing the AWS EBS `gp2` storage class is dedicated to Prometheus to ensure adequate historical storage capacity.
-* **Disaster Recovery (Pod/PVC Failure):**
-  * **Pod Deletion/Crash:** The metric data is decoupled from the Pod lifecycle via the PVC. If the Prometheus Pod crashes or is deleted, Kubernetes will automatically spin up a replacement and reattach the existing EBS volume, ensuring **zero data loss**.
-  * **PVC Deletion:** If the PVC itself is accidentally deleted, the Helm chart's `volumeClaimTemplate` will automatically provision a fresh 20Gi volume upon the next cluster reconciliation. *(Note: For complete disaster recovery against PVC deletion, AWS EBS volume snapshots should be configured)*.
-
-### 3. Jenkins Bootstrapping (Zero-Touch)
-**Prerequisite:** Ensure a secret named `jenkins-github-auth` is created in AWS Secrets Manager (`us-east-1`) containing your GitHub `username` and `pat` (Personal Access Token).
-
-Run the automated deployment script. This script fetches the required AWS secrets dynamically, applies Helm values and JCasC configurations, and automatically creates the Jenkins CI/CD pipelines.
-**True Zero-Touch:** Upon successful boot, the script securely extracts the dynamically generated admin password and a CSRF crumb to trigger the first `Application - CI` build via the Jenkins API autonomously.
-
-    chmod +x install-jenkins.sh
-    ./install-jenkins.sh
-
-### 4. Application Deployment
-Deploy the 3-tier application to the Kubernetes cluster and expose it securely via an AWS LoadBalancer. This automated script sets up the application manifests, configures the Ingress, and outputs the final application URL along with the securely generated Basic Auth credentials.
+#### 3. Application Deployment (Baseline)
+Deploy the 3-tier application to the Kubernetes cluster and expose it securely via an AWS LoadBalancer. This automated script sets up the application manifests, configures the Ingress, and provisions the necessary ConfigMaps and Secrets. This establishes the baseline environment before CI/CD automation takes over.
 
     chmod +x deploy-app.sh
     ./deploy-app.sh
 
+#### 4. Jenkins Bootstrapping (Zero-Touch CI/CD)
+Run the automated deployment script. This script fetches the required AWS secrets dynamically, applies Helm values and JCasC configurations, and automatically creates the Jenkins CI/CD pipelines.
+**True Zero-Touch:** Upon successful boot, the script securely extracts the dynamically generated admin password and a CSRF crumb to trigger the first `Application - CI` build via the Jenkins API autonomously. This first build will seamlessly perform a Rolling Update over the baseline application deployed in the previous step.
+
+    chmod +x install-jenkins.sh
+    ./install-jenkins.sh
+
 ### 5. Verification & Testing
-1. **Access Jenkins:** Use the credentials provisioned by JCasC to log into the Jenkins UI (URL provided by the install script).
+1. **Access Jenkins:** Use the dynamically generated credentials to log into the Jenkins UI.
 2. **Access the Application:** Navigate to the Application Load Balancer URL. The environment is secured via Ingress Basic Authentication.
-   The dynamically generated password is printed securely in the terminal output upon successful completion of the deployment script.
-   * **Username:** `admin`
-   * **Password:** (Check your terminal output)
 3. **Verify Observability:** Access Prometheus (`http://localhost:9090/targets`) and ensure that both `backend-monitor` and `jenkins-monitor` targets are in an `UP` state.
-4. **Verify Automated CI/CD:** Since the bootstrapping script triggers the first CI build automatically, navigate to the Jenkins UI immediately after installation to watch the `Application - CI` job spin up an Agent Pod, build the images, and dynamically trigger the `Application - CD` pipeline.
-5. **Clean Production UI:** Once deployed, log into the application to verify the dynamic infrastructure dashboard is fully functional, pristine, and ready for new client input (initial setup verification data is filtered out from the production view). Subsequent CI/CD runs can be tested by pushing new commits to the GitHub repository.
+4. **Verify Automated CI/CD:** Navigate to the Jenkins UI immediately after installation to watch the `Application - CI` job spin up an Ephemeral Agent Pod, build the images, and dynamically trigger the `Application - CD` pipeline.
 
 ---
 
@@ -143,12 +141,24 @@ Deploy the 3-tier application to the Kubernetes cluster and expose it securely v
 ---
 
 ## 🗑️ Teardown / Destroy
-To safely remove all AWS resources and avoid lingering charges, follow this exact sequence. This ensures no orphaned cloud resources (like AWS Load Balancers) are left behind by Kubernetes.
+To safely remove all AWS resources and avoid lingering charges, it is critical to follow the correct sequence. This ensures no orphaned cloud resources (like AWS Load Balancers or EBS volumes) are left behind by Kubernetes before destroying the underlying infrastructure.
+
+### 💥 Option 1: One-Touch Teardown (Recommended)
+Run the master destruction script to automatically clean up all Kubernetes namespaces, Helm releases, ECR images, and Terraform infrastructure in the correct order.
+
+    chmod +x destroy-all-one-touch.sh
+    ./destroy-all-one-touch.sh
+
+---
+
+### 🛠️ Option 2: Step-by-Step Teardown (Manual)
+If you prefer to tear down the environment manually, execute the following commands in strict order:
 
 1. **Delete Application & Observability Resources (Clears ALBs, ELBs, and EBS Volumes):**
    ```bash
    kubectl delete namespace devops-app
    helm uninstall jenkins -n jenkins
+   kubectl delete namespace jenkins
    helm uninstall kube-prometheus-stack -n observability
    kubectl delete namespace observability
    ```
