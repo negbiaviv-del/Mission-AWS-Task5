@@ -34,16 +34,6 @@ output "rds_subnet_group_id" {
 
 # --- Security Groups ---
 
-output "nginx_sg_id" {
-  description = "The ID of the Nginx security group"
-  value       = aws_security_group.nginx_sg.id
-}
-
-output "backend_sg_id" {
-  description = "The ID of the Backend security group"
-  value       = aws_security_group.backend_sg.id
-}
-
 output "db_sg_id" {
   description = "The ID of the Database security group"
   value       = aws_security_group.db_sg.id

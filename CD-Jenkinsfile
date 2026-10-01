@@ -1,6 +1,10 @@
+// ==============================================================================
+// 1. סביבה והגדרות (Agent & Parameters)
+// ==============================================================================
 pipeline {
     agent {
         kubernetes {
+            // הקמת פוד פשוט שצריך רק קונטיינר אחד שיתחבר לקוברנטיס
             yaml '''
 apiVersion: v1
 kind: Pod
@@ -20,21 +24,28 @@ spec:
     }
 
     parameters {
+        // דרישת קלט מה-CI:
+        // מה מספר הגרסה לפרוס?
         string(name: 'IMAGE_TAG', defaultValue: '', description: 'The unique image tag to deploy (e.g., commit SHA or build number)')
     }
 
     environment {
-        NAMESPACE = "devops-app"
+        NAMESPACE = "devops-app" // הסביבה אליה נדחוף את האפליקציה
     }
 
     stages {
+// ==============================================================================
+// 2. בדיקות מקדימות (Input Validation & Checkout)
+// ==============================================================================
         stage('Input Validation') {
             steps {
                 script {
+                    // מניעת פריסת 'latest'
+                    // או משתנה ריק - כדי למנוע חוסר סנכרון ב-
+                    //  Rollback
                     if (!params.IMAGE_TAG || params.IMAGE_TAG == 'latest') {
                         error "Invalid IMAGE_TAG parameter. You must provide a specific tag, 'latest' is not allowed."
                     }
-                    echo "Starting deployment for version: ${params.IMAGE_TAG}"
                 }
             }
         }
@@ -45,27 +56,36 @@ spec:
             }
         }
 
+// ==============================================================================
+// 3. הכנת סביבת הפריסה (Setup Kubectl)
+// ==============================================================================
         stage('Setup Kubectl') {
             steps {
                 container('kubectl') {
                     sh '''
+                    # בודק אם הכלי kubectl קיים, ואם לא מוריד ומתקין אותו
                     if ! command -v kubectl &> /dev/null; then
-                        echo "Installing kubectl..."
                         apk add --no-cache curl jq
                         curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
                         chmod +x kubectl
                         mv kubectl /usr/local/bin/kubectl
                     fi
-                    kubectl version --client
                     '''
                 }
             }
         }
 
+// ==============================================================================
+// 4. החלפת גרסאות (Update Manifests)
+// ==============================================================================
         stage('Update Manifests') {
             steps {
                 container('kubectl') {
                     sh """
+                    # כלי חיתוך טקסט (sed).
+                    # מחפש את המילה latest
+                    # ומחליף אותה במשתנה IMAGE_TAG
+                    # בתוך קבצי הפריסה
                     sed -i "s/mission-backend:latest/mission-backend:${params.IMAGE_TAG}/g" K8S/backend/deployment.yaml
                     sed -i "s/mission-frontend:latest/mission-frontend:${params.IMAGE_TAG}/g" K8S/frontend/deployment.yaml
                     sed -i "s/mission-worker:latest/mission-worker:${params.IMAGE_TAG}/g" K8S/worker/deployment.yaml
@@ -74,10 +94,14 @@ spec:
             }
         }
 
+// ==============================================================================
+// 5. פריסה ווידוא יציבות (Deploy & Rollout)
+// ==============================================================================
         stage('Deploy') {
             steps {
                 container('kubectl') {
                     sh '''
+                    # החלת השינויים לקלאסטר קוברנטיס
                     kubectl apply -f K8S/backend/
                     kubectl apply -f K8S/frontend/
                     kubectl apply -f K8S/worker/
@@ -90,6 +114,7 @@ spec:
             steps {
                 container('kubectl') {
                     sh '''
+                    # המתנה עד 3 דקות כדי שקוברנטיס יאשר שהפודים החדשים רצים ותקינים
                     kubectl rollout status deployment/backend -n ${NAMESPACE} --timeout=180s
                     kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=180s
                     kubectl rollout status deployment/worker -n ${NAMESPACE} --timeout=180s
@@ -98,47 +123,45 @@ spec:
             }
         }
 
+// ==============================================================================
+// 6. שער ניטור אוטומטי (Post-Deploy Monitoring Gate & Rollback)
+// ==============================================================================
         stage('Post-Deploy Monitoring Gate & Rollback') {
             steps {
                 container('kubectl') {
                     sh '''
-                    apk add --no-cache jq curl
-
                     echo "🚀 Running Smoke Test to generate initial traffic..."
+                    # מריץ פוד זמני ששולח בקשת אינטרנט ל-Backend כדי לעורר אותו לייצר מדדים
                     kubectl run smoke-test-pod-gate --rm -i --restart=Never \
                         --namespace=${NAMESPACE} \
                         --image=curlimages/curl:latest \
                         --command -- curl -s --max-time 10 http://backend-service.${NAMESPACE}.svc.cluster.local:5000/health || true
 
-                    echo "⏳ Waiting for Prometheus to scrape target (polling up to 90s)..."
+                    echo "⏳ Waiting for Prometheus to scrape target..."
+                    # הכתובת הפנימית של שרת פרומתיאוס בקלאסטר
                     PROM_URL="http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090"
                     TARGET_UP="0"
 
-                    # לולאה שבודקת כל 10 שניות, עד 9 פעמים (סה"כ 90 שניות)
+                    # לולאת דגימה: שואלת את פרומתיאוס כל 10 שניות (עד 9 פעמים)
                     for i in {1..9}; do
                         sleep 10
-
-                        # שימוש ב-G ו-data-urlencode כדי לשלוח את השאילתה בצורה בטוחה
+                        # שיגור שאילתת חילוץ נתונים מול ה-API של פרומתיאוס. שימוש ב-jq לחילוץ הערך המדויק מה-JSON.
                         TARGET_UP=$(curl -s -G "$PROM_URL/api/v1/query" --data-urlencode "query=max(up{namespace='${NAMESPACE}'} or up{kubernetes_namespace='${NAMESPACE}'} or up{job=~'.*backend.*'})" | jq -r '.data.result[0].value[1] // "0"')
 
                         if [[ "$TARGET_UP" == "1" ]]; then
                             echo "✅ Prometheus detected target as UP!"
                             break
                         fi
-                        echo "⏱️ Attempt $i/9: Target not ready in Prometheus yet. Waiting..."
                     done
 
+                    # אם פרומתיאוס מדווח על 0 (המערכת למטה), מתבצעת חזרה לגרסה הקודמת
                     if [[ "$TARGET_UP" != "1" ]]; then
-                        echo "🚨 ALERT: Target is DOWN or unreachable in Prometheus!"
-                        echo "🔄 Initiating automatic Rollback..."
+                        echo "🚨 ALERT: Target is DOWN! Initiating automatic Rollback..."
                         kubectl rollout undo deployment/backend -n ${NAMESPACE}
                         kubectl rollout undo deployment/frontend -n ${NAMESPACE}
                         kubectl rollout undo deployment/worker -n ${NAMESPACE}
-                        echo "📖 Refer to runbook: https://github.com/negbiaviv-del/Mission-AWS-Task5/wiki/Runbook-Rollback"
-                        exit 1
+                        exit 1 # הכשלת התהליך
                     fi
-
-                    echo "✅ Deployment is stable. No critical alerts detected."
                     '''
                 }
             }

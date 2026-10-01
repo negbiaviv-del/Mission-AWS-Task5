@@ -1,15 +1,23 @@
-import os
-import json
-import psycopg2
-from psycopg2.extras import RealDictCursor
-import boto3
-from flask import Flask, render_template_string, request, redirect, url_for, flash, Response, jsonify
-from flask_cors import CORS
-from datetime import datetime
-from prometheus_flask_exporter import PrometheusMetrics
-from prometheus_client import Counter # <-- תוספת המדדים העסקיים
+# ==============================================================================
+# 1. ייבוא ספריות והגדרת האפליקציה (Imports & App Setup)
+# מה הבלוק עושה: מייבא את הכלים הדרושים, מגדיר את שרת ה-
+# Flask,
+# מחבר את פרומיתיאוס וקובע הרשאות
+# CORS.
+# למה צריך את זה: זהו הבסיס של האפליקציה. ללא ההגדרות הללו השרת לא ירוץ, לא יהיה מאובטח ולא ייצר מטריקות.
+# ==============================================================================
+import os                                      # גישה למשתני סביבה (Environment Variables)
+import json                                    # עבודה והמרת נתוני JSON
+import psycopg2                                # התחברות למסד הנתונים PostgreSQL
+from psycopg2.extras import RealDictCursor     # שליפת נתונים מהמסד כמילון (Dictionary)
+import boto3                                   # התחברות ושליטה בשירותי AWS
+from flask import Flask, render_template_string, request, redirect, url_for, flash, Response, jsonify # כלים להקמת שרת אינטרנט וניתובים
+from flask_cors import CORS                    # הגנה וניהול הרשאות גישה (CORS) מול ה-Frontend
+from datetime import datetime                  # עבודה עם תאריכים ושעות מדויקות
+from prometheus_flask_exporter import PrometheusMetrics # ייצוא מדדי שרת אוטומטיים לפרומיתיאוס
+from prometheus_client import Counter          # יצירת מדדים עסקיים מותאמים אישית (Business Metrics)
 
-app = Flask(__name__)
+app = Flask(__name__)                          # אתחול שרת ה-Flask
 
 # פקודה זו עוטפת את האפליקציה ומייצרת אוטומטית את נתיב ה-/metrics
 metrics = PrometheusMetrics(app)
@@ -18,13 +26,25 @@ metrics = PrometheusMetrics(app)
 INFRA_CREATED_METRIC = Counter('business_infra_created_total', 'Total number of infrastructure configurations successfully created')
 INFRA_DELETED_METRIC = Counter('business_infra_deleted_total', 'Total number of infrastructure configurations deleted', ['deletion_type'])
 
-# סגירת פרצת ה-CORS: מאפשרים גישה רק למה שמגיע מה-Frontend שלנו
+# סגירת פרצת ה-
+# CORS:
+# מאפשרים גישה רק למה שמגיע מה-
+# Frontend שלנו
 FRONTEND_URL = os.getenv("FRONTEND_URL", "*")
 CORS(app, resources={r"/*": {"origins": FRONTEND_URL}})
 
 app.secret_key = os.getenv("SECRET_KEY", "default-dev-key")
 
-# --- AWS Configuration ---
+
+# ==============================================================================
+# 2. הגדרת חיבורי ענן (AWS Configuration)
+# מה הבלוק עושה: מושך את כתובות שירותי הענן ויוצר "לקוחות"
+# (Clients)
+# של Boto3.
+# למה צריך את זה: כדי לאפשר לקוד לדבר עם שירותי
+# AWS
+# (לשמור ב-S3, לשלוח ל-SQS, ולהתריע ב-SNS).
+# ==============================================================================
 SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET")
 SNS_TOPIC_ARN = os.getenv("SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:544471418394:aviv-project-alerts-v2").strip()
@@ -34,7 +54,15 @@ s3_client = boto3.client('s3', region_name=AWS_REGION)
 sns_client = boto3.client('sns', region_name=AWS_REGION)
 sqs_client = boto3.client('sqs', region_name=AWS_REGION)
 
-# --- Database Configuration ---
+
+# ==============================================================================
+# 3. הגדרת מסד הנתונים (Database Configuration)
+# מה הבלוק עושה: מרכז את כל פרטי ההתחברות למסד ה-
+# PostgreSQL למילון אחד.
+# למה צריך את זה: שומר על סדר ומונע
+# Hardcoding
+# של סיסמאות בתוך הקוד, שולף הכל ממשתני הסביבה של קוברנטיס.
+# ==============================================================================
 DB_CONFIG = {
     "host": os.getenv("DB_HOST"),
     "database": os.getenv("DB_NAME", "postgres"),
@@ -43,7 +71,19 @@ DB_CONFIG = {
     "sslmode": "require"
 }
 
-# --- HTML Template ---
+
+# ==============================================================================
+# 4. ממשק המשתמש (HTML Template)
+# מה הבלוק עושה: שומר את כל חזית האתר
+# (HTML, Tailwind CSS ו-JS)
+# כמחרוזת טקסט.
+# למה צריך את זה: עיצוב בארכיטקטורת
+# Server-Side Rendering (SSR).
+#  מאפשר לשרת ה-
+# Backend
+# להגיש את דף האינטרנט ישירות מבלי להקים שרת
+# Frontend נפרד.
+# ==============================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -280,11 +320,20 @@ HTML_TEMPLATE = """
 </html>
 """
 
+
+# ==============================================================================
+# 5. פונקציות עזר ובדיקות תקינות (Helpers & Healthchecks)
+# מה הבלוק עושה: מנהל את פתיחת החיבור למסד הנתונים, ומספק נתיב לבדיקת בריאות
+# (/health)
+# ונתיב לסימולציית שגיאה.
+# למה צריך את זה: כדי שקוברנטיס ידע מתי הפוד תקין
+# (Liveness/Readiness probes),
+# וכדי לבדוק שההתראות בגרפאנה קופצות במקרה של שגיאת 500.
+# ==============================================================================
 def get_db_connection():
     DB_CONFIG['sslmode'] = 'require'
     return psycopg2.connect(**DB_CONFIG)
 
-# --- הוספת נתיב Healthcheck חכם ---
 @app.route('/health')
 def health_check():
     try:
@@ -299,6 +348,19 @@ def health_check():
 def error_drill():
     return jsonify({"status": "error", "message": "Simulating high error rate!"}), 500
 
+
+# ==============================================================================
+# 6. נתיבים מרכזיים (Main Routes: Index & Add)
+# מה הבלוק עושה: מציג את דף הבית עם הטבלה מהמסד, ומטפל בטופס יצירת התשתית
+# (/add).
+# למה צריך את זה: הליבה הלוגית של האפליקציה. כשמשתמש יוצר בקשה, הבלוק הזה שומר אותה ב-
+# PostgreSQL,
+# מעלה קובץ ל-
+# S3, זורק הודעה ל-
+# SQS,
+# מתריע ב-SNS
+# ומקפיץ את המדד בגרפאנה.
+# ==============================================================================
 @app.route('/')
 def index():
     rows = []
@@ -306,7 +368,6 @@ def index():
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # סינון שורות הטסט (id 1 עד 3) כדי שהמסך יהיה נקי ללקוח בהקמה
                 cur.execute("SELECT id, name, status FROM mission_data WHERE id > 3 ORDER BY id DESC;")
                 db_rows = cur.fetchall()
                 for r in db_rows:
@@ -331,7 +392,6 @@ def add_entry():
 
     if name and instance_type:
         try:
-            # חותמת זמן דינמית ואמיתית
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             full_payload = {
@@ -375,7 +435,6 @@ def add_entry():
 """
             sns_client.publish(TopicArn="arn:aws:sns:us-east-1:544471418394:aviv-project-alerts-v2", Message=sns_message, Subject=f"Full Config Created: {name}")
 
-            # --- עדכון המדד העסקי של פרומתיאוס (הקפצת יצירה) ---
             INFRA_CREATED_METRIC.inc()
 
             flash(f"Successfully created '{name}'!", "success")
@@ -384,6 +443,18 @@ def add_entry():
             flash(f"System Error: {str(e)}", "error")
     return redirect(url_for('index'))
 
+
+# ==============================================================================
+# 7. ממשקי API ופעולות מחיקה (API & Deletion Actions)
+# מה הבלוק עושה: מספק גישה לתצוגה מקדימה, הורדת
+# JSON,
+# ומחיקת רשומות בודדת או קבוצתית.
+# למה צריך את זה: כדי לתפעל את פעולות כפתורי הטבלה ב
+# Frontend.
+# כשרשומה נמחקת, הבלוק אחראי למחוק אותה מהמסד, לשלוח התראת
+# SNS
+# לערוץ הניהול, ולעדכן את פרומיתיאוס שמשהו נמחק.
+# ==============================================================================
 @app.route('/api/preview/<int:entry_id>')
 def api_preview(entry_id):
     try:
@@ -440,7 +511,6 @@ Action: Permanent Deletion Completed.
                     sns_client.publish(TopicArn=SNS_TOPIC_ARN, Message=del_message, Subject=f"Infrastructure Deleted: {name}")
                     cur.execute("DELETE FROM mission_data WHERE id = %s;", (entry_id,))
 
-                    # --- עדכון המדד העסקי של פרומתיאוס (מחיקה בודדת) ---
                     INFRA_DELETED_METRIC.labels(deletion_type='single').inc()
 
         flash(f"Record '{name}' deleted.", "success")
@@ -480,7 +550,6 @@ Priority: High - Cleanup successful.
                 sns_client.publish(TopicArn=SNS_TOPIC_ARN, Message=bulk_message, Subject="Infrastructure Alert: Bulk Action")
                 cur.execute("DELETE FROM mission_data WHERE id IN %s;", (id_tuple,))
 
-                # --- עדכון המדד העסקי של פרומתיאוס (מחיקה מרובה) ---
                 INFRA_DELETED_METRIC.labels(deletion_type='bulk').inc(len(ids))
 
         flash(f"Deleted {len(ids)} instances.", "success")
@@ -489,5 +558,11 @@ Priority: High - Cleanup successful.
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
+# ==============================================================================
+# 8. הפעלת השרת (App Runner)
+# מה הבלוק עושה: מחייב את פייתון להריץ את השרת על פורט 5000 כשהקובץ מופעל.
+# למה צריך את זה: כדי שהקונטיינר בקוברנטיס יידע לפתוח את הפורט הנכון ולהתחיל להאזין לבקשות הלקוחות.
+# ==============================================================================
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

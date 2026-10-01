@@ -1,11 +1,21 @@
+# ==============================================================================
+# 1. הגדרות וקישוריות (Metadata & Labels):
+# שיוך הגשש למערכת ה-
+#Prometheus המרכזית.
+# ==============================================================================
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: jenkins-monitor
-  namespace: observability # חשוב: חייב להיות ב-namespace של הניטור
+  namespace: observability 
   labels:
     release: kube-prometheus-stack # התגית שגורמת לפרומתיאוס לזהות את הקובץ
 spec:
+# ==============================================================================
+# 2. איתור השירות (Selectors):
+# הגדרת יעד הניטור
+# (שירות ה-Jenkins בסביבת jenkins).
+# ==============================================================================
   selector:
     matchLabels:
       app.kubernetes.io/instance: jenkins
@@ -13,6 +23,10 @@ spec:
   namespaceSelector:
     matchNames:
       - jenkins
+# ==============================================================================
+# 3. הגדרות דגימה (Endpoints):
+# קביעת הנתיב הייעודי של ג'נקינס ותדירות הדגימה כל 30 שניות.
+# ==============================================================================
   endpoints:
     - port: http
       path: /prometheus/

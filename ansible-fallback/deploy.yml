@@ -1,0 +1,116 @@
+---
+- name: Deploy AWS EKS Application (CD Pipeline - Fallback)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    region: "us-east-1"
+    namespace: "devops-app"
+
+  tasks:
+    # 1. שליפת פלטים מטרפורם: מחלץ את כתובת ה-
+    # DB,
+    # שם המשתמש והסיסמה מתוך התשתית שהוקמה.
+    - name: 1a. Fetch DB outputs from Terraform
+      ansible.builtin.command: terraform output -raw {{ item }}
+      args:
+        chdir: ../Terraform
+      register: tf_db
+      loop:
+        - db_address
+        - db_user
+        - db_password
+      changed_when: false
+
+    # 2. שליפת משאבי ענן דינמיים: משיג את ה-
+    # ARN
+    # של תפקיד ה-
+    # IAM,
+    # שם ה-
+    # S3 Bucket
+    # וכתובת הקלאסטר מקבצי המצב
+    # (State) של טרפורם.
+    - name: 1b. Fetch dynamic AWS data from Terraform state
+      ansible.builtin.shell: "{{ item }}"
+      args:
+        chdir: ../Terraform
+      register: tf_state
+      loop:
+        - "terraform state show $(terraform state list | grep aws_iam_role.ec2_role | head -n 1) | grep '^ *arn ' | awk '{print $3}' | tr -d '\"'"
+        - "terraform state show $(terraform state list | grep aws_s3_bucket. | head -n 1) | grep '^ *bucket ' | awk '{print $3}' | tr -d '\"'"
+        - "terraform output -raw configure_kubectl | awk -F'--name ' '{print $2}'"
+      changed_when: false
+
+    # 3. עדכון הרשאות קוברנטיס: מעדכן את קובץ ה-
+    # Kubeconfig
+    # המקומי כדי שהמערכת תוכל לתקשר עם קלאסטר ה-
+    # EKS החדש.
+    - name: 2. Update local kubeconfig for EKS Cluster
+      ansible.builtin.command: |
+        aws eks update-kubeconfig --region {{ region }} --name {{ tf_state.results[2].stdout }}
+      changed_when: false
+
+    # 4. פריסת קבצי התצורה: מריץ את כל קבצי ה-
+    # YAML
+    # של האפליקציה סביבות, סודות, שרתים מתוך תיקיית הפרויקט.
+    - name: 3. Apply base Kubernetes manifests
+      ansible.builtin.shell: |
+        kubectl create namespace {{ namespace }} --dry-run=client -o yaml | kubectl apply -f -
+        if [ -f "external-secrets.yaml" ]; then kubectl apply -f external-secrets.yaml; fi
+        if [ -f "network-policies.yaml" ]; then kubectl apply -f network-policies.yaml; fi
+        kubectl apply -f backend/
+        kubectl apply -f worker/
+        kubectl apply -f frontend/
+      args:
+        chdir: ../K8S
+
+    # 5. הזרקת כתובת ה-
+    # DB:
+    # מעדכן את פוד ה-
+    # Backend
+    # עם משתנה סביבה שמכיל את כתובת מסד הנתונים שנשלפה מטרפורם.
+    - name: 4a. Inject DB Host into Backend
+      ansible.builtin.command: |
+        kubectl set env deployment/backend DB_HOST={{ tf_db.results[0].stdout }} -n {{ namespace }}
+      when: tf_db.results[0].stdout != ""
+
+    # 6. הזרקת סודות ה-
+    # DB:
+    # מכניס בצורה מאובטחת את סיסמת ושם המשתמש של מסד הנתונים לתוך ה-
+    # Secrets של קוברנטיס.
+    - name: 4b. Inject DB Credentials into Secrets
+      ansible.builtin.command: |
+        kubectl patch secret app-secrets -n {{ namespace }} -p '{"stringData": {"DB_USER": "{{ tf_db.results[1].stdout }}", "DB_PASSWORD": "{{ tf_db.results[2].stdout }}"}}'
+      when: tf_db.results[1].stdout != "" and tf_db.results[2].stdout != ""
+
+    # 7. הזרקת שם ה-
+    # S3 Bucket:
+    # מעדכן את ה-
+    # ConfigMap
+    # כדי שהאפליקציה תדע מול איזה דלי אחסון לעבוד באמזון.
+    - name: 4c. Inject S3 Bucket into ConfigMap
+      ansible.builtin.command: |
+        kubectl patch configmap app-config -n {{ namespace }} -p '{"data": {"S3_BUCKET_NAME": "{{ tf_state.results[1].stdout }}"}}'
+      when: tf_state.results[1].stdout != ""
+
+    # 8. הזרקת הרשאות ענן לפוד: מקשר לפוד ה-
+    # Backend
+    # הרשאות (IAM Role)
+    # שמאפשרות לו לגשת לשירותי
+    # AWS.
+    - name: 4d. Inject IAM Role ARN into ServiceAccount
+      ansible.builtin.command: |
+        kubectl annotate serviceaccount backend-sa -n {{ namespace }} eks.amazonaws.com/role-arn={{ tf_state.results[0].stdout }} --overwrite
+      when: tf_state.results[0].stdout != ""
+
+    # 9. רענון פודים: מבצע פעולת
+    # Restart
+    # אוטומטית לפודים כדי שיחלו לעבוד עם כל הנתונים, הסודות וההרשאות החדשים שהוזרקו אליהם.
+    - name: 5. Perform rollout restart
+      ansible.builtin.command: |
+        kubectl rollout restart deployment/{{ item }} -n {{ namespace }}
+      loop:
+        - backend
+        - worker
+        - frontend

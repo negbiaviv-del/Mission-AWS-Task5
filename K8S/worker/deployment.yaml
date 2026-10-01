@@ -1,4 +1,9 @@
----
+# ==============================================================================
+# 1. הגדרות כלליות (Metadata & Replicas):
+# פריסת רכיב הרקע
+# (Worker)
+# בעותק יחיד.
+# ==============================================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,21 +21,29 @@ spec:
       labels:
         app: worker
     spec:
+# ==============================================================================
+# 2. הרשאות פוד (Pod Security & SA):
+# הפעלת זהות
+# AWS,
+# חסימת גישה ל-
+# API
+# והרצה כ-Non-Root.
+# ==============================================================================
       serviceAccountName: worker-sa
+      automountServiceAccountToken: false  # <-- חסימת גישה למערכת קוברנטיס
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
+# ==============================================================================
+# 3. הגדרת קונטיינר וסביבה (Container Spec):
+# משיכת הקוד והזרקת הגדרות וסודות מהקלאסטר.
+# ==============================================================================
       containers:
         - name: worker
           # התגית תוחלף דינמית על ידי סקריפט ה-bash
           image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-worker:latest
           imagePullPolicy: Always
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
           envFrom:
             - configMapRef:
                 name: app-config
@@ -39,6 +52,19 @@ spec:
                 name: db-app-secrets
             - secretRef:
                 name: flask-secret
+# ==============================================================================
+# 4. הקשחת קונטיינר (Security Context):
+# חסימת הסלמת הרשאות וניקוי יכולות מערכת לינוקס.
+# ==============================================================================
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+# ==============================================================================
+# 5. ניהול משאבים (Resource Limits):
+# הגדרת רף מינימום ומקסימום למניעת צריכת יתר.
+# ==============================================================================
           resources:
             requests:
               memory: "128Mi"

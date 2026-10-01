@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# 1. יצירת משתמש וקבוצה Non-Root (פותר את הערת האבטחה של אביעד!)
+# 1. יצירת משתמש וקבוצה Non-Root
 RUN groupadd -r appuser && useradd -r -g appuser -m -d /home/appuser appuser
 
 WORKDIR /app
