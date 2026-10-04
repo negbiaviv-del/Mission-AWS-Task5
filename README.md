@@ -1,10 +1,10 @@
-![AWS Architecture](evidence/Architecture.jpg)
+![AWS Architecture](evidence/Architecture.png)
 
 # Final Project: Automated and Distributed 3-Tier Cloud Infrastructure with Jenkins CI/CD
 
 **Submitted by:** Aviv Moshe Negbi
 **Course / Lecturer:** DevOps / Aviad (John Bryce)
-**Date Updated:** August 2026
+**Date Updated:** October 2026
 
 ---
 
@@ -30,7 +30,7 @@ This project presents an advanced, secure, and distributed cloud architecture us
 ## 🚀 The CI/CD Pipeline (Separation of Concerns)
 Following best practices, the pipeline is strictly divided into two separate processes:
 
-### 1. Continuous Integration (`Application - CD`)
+### 1. Continuous Integration (`Application - CI`)
 Triggered automatically by a GitHub Webhook upon a push to the repository.
 * **Checkout & Validation:** Fetches code and validates Dockerfiles and manifests.
 * **Linting & Tests:** Runs static code analysis and basic unit tests.
@@ -43,7 +43,7 @@ Triggered downstream by the CI pipeline. **It does not build code.**
 * **Manifest Validation:** Runs `helm template` or `kubectl dry-run` to validate K8s syntax.
 * **Deploy:** Updates the Kubernetes Deployments in the `devops-app` namespace using the new image tag.
 * **Verify (Rollout):** Waits for `kubectl rollout status` to complete successfully.
-* **Smoke Test:** Performs a basic HTTP health check against the application's external Ingress.
+* **Smoke Test:** Performs a basic HTTP health check against the application's external Ingress, integrated with Prometheus for automated rollbacks.
 
 ---
 
@@ -76,7 +76,7 @@ For a complete, automated end-to-end deployment, use the provided master script.
 
 ---
 
-### 🛠️ Option 2: Step-by-Step Deployment (Manual)
+### 🛠️️ Option 2: Step-by-Step Deployment (Manual)
 
 If you prefer to deploy each component individually to observe the process, follow these steps in order:
 
@@ -127,8 +127,8 @@ Run the automated deployment script. This script fetches the required AWS secret
 
 ## ⏪ Failure Handling & Rollback
 * **CI Failures:** If tests or builds fail, the image is not pushed, and the CD pipeline is not triggered.
-* **CD Failures:** If the deployment fails validation, no changes are made to the cluster. If the `kubectl rollout status` fails or the Smoke Test fails, the CD pipeline stops.
-* **Rollback Procedure:** To rollback to a previous stable version, manually trigger the `Application - CD` pipeline from the Jenkins UI and provide the previous known-good `IMAGE_TAG` (Git SHA) as the build parameter. The CD pipeline will gracefully re-deploy the older, verified image.
+* **CD Failures:** If the deployment fails validation, no changes are made to the cluster. If the `kubectl rollout status` fails or the Smoke Test fails, the CD pipeline stops and automatically rolls back.
+* **Rollback Procedure:** To rollback to a previous stable version manually, trigger the `Application - CD` pipeline from the Jenkins UI and provide the previous known-good `IMAGE_TAG` (Git SHA) as the build parameter. The CD pipeline will gracefully re-deploy the older, verified image.
 
 ---
 
@@ -155,31 +155,21 @@ Run the master destruction script to automatically clean up all Kubernetes names
 If you prefer to tear down the environment manually, execute the following commands in strict order:
 
 1. **Delete Application & Observability Resources (Clears ALBs, ELBs, and EBS Volumes):**
-   ```bash
-   kubectl delete namespace devops-app
-   helm uninstall jenkins -n jenkins
-   kubectl delete namespace jenkins
-   helm uninstall kube-prometheus-stack -n observability
-   kubectl delete namespace observability
-   ```
 
-2. **Clean ECR Repositories (Removes Docker Images):**
-   ```bash
-   chmod +x ecr-teardown.sh
-   ./ecr-teardown.sh
-   ```
+    kubectl delete namespace devops-app
+    helm uninstall jenkins -n jenkins
+    kubectl delete namespace jenkins
+    helm uninstall kube-prometheus-stack -n observability
+    kubectl delete namespace observability
 
-3. **Destroy Infrastructure:**
-   ```bash
-   cd Terraform
-   terraform destroy -auto-approve
-   ```
+2. **Destroy Infrastructure:**
 
-*Note: If you utilized an S3 bucket for Terraform state, ensure it is emptied manually via the AWS Console or CLI if it is not configured with `force_destroy`.*
+    cd Terraform
+    terraform destroy -auto-approve
 
 ## 🛡️ Project Proofs & Security Validation
 
-To validate the successful implementation of the CI/CD pipelines, security measures, and architectural requirements, all visual proofs have been consolidated in the `Docs/` directory.
+To validate the successful implementation of the CI/CD pipelines, security measures, and architectural requirements, all visual proofs have been consolidated below.
 
 ### 1. CI/CD Automation Success
 Full automation from Git push to EKS deployment, including ECR image pushes and automated CD pipeline triggers.
@@ -187,12 +177,12 @@ Full automation from Git push to EKS deployment, including ECR image pushes and 
 
 ### 2. Zero-Touch Secrets Management
 Complete integration with AWS Secrets Manager to ensure zero hardcoded credentials or tokens exist within the repository.
-![AWS Secrets Manager](Docs/AWS%20Secret%20Manager.png)
+![AWS Secrets Manager](evidence/AWS%20Secret%20Manager.png)
 ![No Passwords](evidence/NO%20Password%20-%20Only%20AWS%20Secret.png)
 
 ### 3. Ephemeral Agents & Isolation
 Implementation of dynamic, short-lived Jenkins agents running Docker-in-Docker (DinD) for secure, isolated build environments.
-![Ephemeral Agents](Docs/Ephemeral%20Agents.png)
+![Ephemeral Agents](evidence/Ephemeral%20Agents.png)
 ![PodTemplate](evidence/Console%20Output%20-%20PodTemplate%20.png)
 
 ### 4. DevSecOps (Trivy Vulnerability Scanning)
