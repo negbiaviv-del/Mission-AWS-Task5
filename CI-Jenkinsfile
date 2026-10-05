@@ -1,38 +1,38 @@
 // ==============================================================================
-// 1. סביבת הריצה והמשתנים (Agent & Environment)
+// 1. Agent and Environment - סביבת הריצה והמשתנים
 // ==============================================================================
 pipeline {
     agent {
         kubernetes {
-            // הגדרת פוד זמני שישמש כשרת הבנייה שלנו
+            // הגדרת פוד זמני שישמש כשרת הבניה שלנו
             yaml '''
 apiVersion: v1
 kind: Pod
 metadata:
   labels:
-    component: ci-agent # תווית לזיהוי הפוד בקלאסטר
+    component: ci-agent # תווית לזיהוי הפוד
 spec:
-  serviceAccountName: jenkins # הרשאה לפוד לדבר עם קוברנטיס
+  serviceAccountName: jenkins # הרשאה לפוד מול קוברנטיס
   containers:
-  - name: docker # קונטיינר ראשון: מריץ את שירות Docker לבניית אימגים
-    image: docker:24.0.5-dind # DinD = Docker in Docker
+  - name: docker
+    image: docker:24.0.5-dind # Docker in Docker
     securityContext:
-      privileged: true # חובה כדי להריץ שירות דוקר בתוך קונטיינר
+      privileged: true # חובה עבור הרצת דוקר בתוך קונטיינר
     tty: true
     env:
     - name: DOCKER_TLS_CERTDIR
-      value: "" # ביטול הצפנת TLS פנימית כדי למנוע תקלות חיבור לדוקר
-  - name: tools # קונטיינר שני: מכיל כלים כמו Terraform
+      value: "" # ביטול הצפנה פנימית למניעת תקלות
+  - name: tools
     image: hashicorp/terraform:1.5
     command:
     - cat
     tty: true
-  - name: python # קונטיינר שלישי: להרצת סקריפטים ובדיקות קוד
+  - name: python
     image: python:3.11-slim
     command:
     - cat
     tty: true
-  - name: trivy # קונטיינר רביעי: מנוע סריקת אבטחה של חברת Aqua
+  - name: trivy
     image: aquasec/trivy:latest
     command:
     - cat
@@ -42,40 +42,39 @@ spec:
     }
 
     environment {
-        // הכתובת של רגיסטרי האימגים שלנו באמזון
-        // (ECR)
+        // כתובת מאגר התמונות שלנו באמזון
         ECR_REGISTRY = "544471418394.dkr.ecr.us-east-1.amazonaws.com"
         AWS_REGION = "us-east-1"
-        // ייצור תגית ייחודית: לוקח את 7 התווים הראשונים של מספר הקומיט בגיט, או את מספר הבנייה של גנקינס אם אין גיט
+        // יצירת תגית ייחודית מבוססת גיט או מספר בניה
         IMAGE_TAG = "${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : env.BUILD_NUMBER}"
     }
 
     stages {
 // ==============================================================================
-// 2. משיכת הקוד (Checkout)
+// 2. Checkout - משיכת הקוד
 // ==============================================================================
         stage('Checkout') {
             steps {
-                // פקודה מובנית של גנקינס להורדת הקוד מה-Repository
+                // הורדת הקוד מהמאגר
                 checkout scm
             }
         }
 
 // ==============================================================================
-// 3. בדיקות תקינות (Lint & Validate)
+// 3. Lint and Validate - בדיקות תקינות
 // ==============================================================================
         stage('Lint & Validate') {
-            parallel { // הרצת 3 הבדיקות הבאות במקביל כדי לחסוך זמן
+            parallel {
                 stage('Terraform') {
                     steps {
                         container('tools') {
-                            dir('Terraform') { // כניסה לתיקיית טרהפורם
+                            dir('Terraform') {
                                 sh '''
-                                # מוודא שהקוד מעוצב נכון
+                                # בדיקת עיצוב הקוד
                                 terraform fmt -check
-                                # מאתחל את טרהפורם ללא חיבור לסטייט מרוחק (רק לבדיקה מקומית)
+                                # אתחול ללא חיבור לענן
                                 terraform init -backend=false
-                                # בודק שאין שגיאות לוגיות בקוד התשתית
+                                # בדיקת לוגיקה
                                 terraform validate
                                 '''
                             }
@@ -86,12 +85,11 @@ spec:
                     steps {
                         container('python') {
                             sh '''
-                            # מתקין סורק תחביר לקבצי YAML
+                            # בדיקת קבצי יאמל
                             pip install yamllint
-                            # מקמפל את קוד הפייתון כדי לוודא שאין שגיאות קריטיות (Syntax Errors)
+                            # קימפול קוד פייתון לבדיקת שגיאות
                             python -m py_compile Backend/*.py
                             python -m py_compile Worker/*.py
-                            # סורק את כל קבצי הקוברנטיס שלנו
                             yamllint K8S/
                             '''
                         }
@@ -101,20 +99,20 @@ spec:
                     steps {
                         container('python') {
                             sh '''
-                            echo "🔍 Validating Dashboards YAML..."
+                            echo "Validating Dashboards YAML..."
                             pip install pyyaml
-                            # בודק שקובץ הדאשבורד הוא JSON/YAML תקין ולא ישבור את גרפנה
+                            # בדיקת תקינות קובץ הדאשבורד
                             python -c 'import yaml, sys; yaml.safe_load(open("monitoring/backend-dashboard.yaml"))' || exit 1
 
-                            echo "📦 Installing curl..."
+                            echo "Installing curl..."
                             apt-get update && apt-get install -y curl
 
-                            echo "🔍 Extracting Prometheus rules from Kubernetes CRD..."
-                            # מחלץ רק את בלוק ה-spec מקובץ ההתראות כדי שכלי הבדיקה יוכל לקרוא אותו
+                            echo "Extracting Prometheus rules..."
+                            # חילוץ חוקי התראות לבדיקה
                             python -c 'import yaml; doc = yaml.safe_load(open("monitoring/app-alerts.yaml")); yaml.dump(doc.get("spec", {}), open("monitoring/pure-rules.yaml", "w"))'
 
-                            echo "🔍 Validating Prometheus Rules..."
-                            # מוריד כלי בדיקה רשמי של פרומתיאוס ומריץ אותו על ההתראות שלנו
+                            echo "Validating Prometheus Rules..."
+                            # הרצת כלי רשמי לבדיקת חוקי ההתראות
                             curl -s -L https://github.com/prometheus/prometheus/releases/download/v2.45.0/prometheus-2.45.0.linux-amd64.tar.gz | tar xz
                             ./prometheus-2.45.0.linux-amd64/promtool check rules monitoring/pure-rules.yaml
                             '''
@@ -125,46 +123,41 @@ spec:
         }
 
 // ==============================================================================
-// 4. סריקות אבטחה (Security Scans)
+// 4. Security Scans - סריקות אבטחה
 // ==============================================================================
         stage('Security Scans (Trivy)') {
             steps {
                 container('trivy') {
-                    // סורק את מערכת הקבצים המקומית (fs) לפרצות קריטיות וגבוהות. מופעל עם exit-code 0 כדי לא להכשיל בנייה כרגע (מצב אזהרה בלבד)
+                    // סריקת הקבצים לחולשות אבטחה
                     sh 'trivy fs --format table --exit-code 0 --severity CRITICAL,HIGH .'
                 }
             }
         }
 
 // ==============================================================================
-// 5. בנייה ואחסון (Build & Push to ECR)
+// 5. Build and Push - בניה והעלאה
 // ==============================================================================
         stage('Build & Push to ECR') {
             steps {
                 container('docker') {
-                    // שימוש בהרשאות AWS שנשמרו ב-Jenkins Credentials
                     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                         sh '''
-                        echo "==> Starting Docker Daemon..."
-                        # הדלקת שירות דוקר ברקע והמתנה שיעלה
+                        # הפעלת שירות דוקר ברקע
                         dockerd &
                         sleep 10
 
-                        echo "==> Installing AWS CLI..."
+                        # התקנת כלי אמזון
                         apk add --no-cache aws-cli
 
-                        echo "==> Logging into AWS ECR..."
-                        # שליפת סיסמה זמנית מ-AWS והתחברות לדוקר מול הרג'יסטרי
+                        # התחברות למאגר התמונות
                         aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
 
-                        echo "==> Building Images..."
-                        # בניית אימג'ים ותיוגם עם הכתובת וה-TAG הייחודי שלנו
+                        # בנית התמונות עם התגית הייחודית
                         docker build -t $ECR_REGISTRY/mission-backend:$IMAGE_TAG ./Backend
                         docker build -t $ECR_REGISTRY/mission-frontend:$IMAGE_TAG ./Frontend
                         docker build -t $ECR_REGISTRY/mission-worker:$IMAGE_TAG ./Worker
 
-                        echo "==> Pushing Images to ECR..."
-                        # העלאת האימג'ים לענן
+                        # העלאת התמונות לענן
                         docker push $ECR_REGISTRY/mission-backend:$IMAGE_TAG
                         docker push $ECR_REGISTRY/mission-frontend:$IMAGE_TAG
                         docker push $ECR_REGISTRY/mission-worker:$IMAGE_TAG
@@ -175,11 +168,11 @@ spec:
         }
 
 // ==============================================================================
-// 6. העברת שרביט (Publish & Trigger CD)
+// 6. Publish and Trigger CD - העברת שרביט
 // ==============================================================================
         stage('Publish Metadata') {
             steps {
-                // כותב את מספר הגרסה לקובץ טקסט ושומר אותו בארכיון של גנקינס
+                // שמירת מספר הגרסה בקובץ
                 writeFile file: 'image_tag.txt', text: "${IMAGE_TAG}"
                 archiveArtifacts artifacts: 'image_tag.txt'
             }
@@ -187,11 +180,10 @@ spec:
 
         stage('Trigger CD') {
             steps {
-                // מפעיל את הגוב של ה-
-                // CD ומעביר אליו את מספר הגרסה כדי שידע מה לפרוס
-                build job: 'Application - CD', parameters: [
+                // הפעלת תהליך הפריסה והעברת הגרסה הלאה
+                build job: 'Application-CD', parameters: [
                     string(name: 'IMAGE_TAG', value: "${IMAGE_TAG}")
-                ], wait: false // לא מחכה שה-CD יסתיים כדי לסיים את הגוב הנוכחי
+                ], wait: false
             }
         }
     }
