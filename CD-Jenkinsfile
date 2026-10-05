@@ -1,5 +1,5 @@
 // ==============================================================================
-// 1. סביבה והגדרות (Agent & Parameters)
+// 1. Agent and Parameters - סביבה והגדרות
 // ==============================================================================
 pipeline {
     agent {
@@ -24,8 +24,8 @@ spec:
     }
 
     parameters {
-        // דרישת קלט מה-CI:
-        // מה מספר הגרסה לפרוס?
+        // דרישת קלט מתהליך הבניה
+        // מה מספר הגרסה לפרוס
         string(name: 'IMAGE_TAG', defaultValue: '', description: 'The unique image tag to deploy (e.g., commit SHA or build number)')
     }
 
@@ -35,14 +35,13 @@ spec:
 
     stages {
 // ==============================================================================
-// 2. בדיקות מקדימות (Input Validation & Checkout)
+// 2. Input Validation and Checkout - בדיקות מקדימות
 // ==============================================================================
         stage('Input Validation') {
             steps {
                 script {
-                    // מניעת פריסת 'latest'
-                    // או משתנה ריק - כדי למנוע חוסר סנכרון ב-
-                    //  Rollback
+                    // מניעת פריסת גרסת latest
+                    // או משתנה ריק - כדי למנוע חוסר סנכרון בשחזור גרסה
                     if (!params.IMAGE_TAG || params.IMAGE_TAG == 'latest') {
                         error "Invalid IMAGE_TAG parameter. You must provide a specific tag, 'latest' is not allowed."
                     }
@@ -57,13 +56,13 @@ spec:
         }
 
 // ==============================================================================
-// 3. הכנת סביבת הפריסה (Setup Kubectl)
+// 3. Setup Kubectl - הכנת סביבת הפריסה
 // ==============================================================================
         stage('Setup Kubectl') {
             steps {
                 container('kubectl') {
                     sh '''
-                    # בודק אם הכלי kubectl קיים, ואם לא מוריד ומתקין אותו
+                    # בודק אם הכלי קיים, ואם לא מוריד ומתקין אותו
                     if ! command -v kubectl &> /dev/null; then
                         apk add --no-cache curl jq
                         curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
@@ -76,15 +75,15 @@ spec:
         }
 
 // ==============================================================================
-// 4. החלפת גרסאות (Update Manifests)
+// 4. Update Manifests - החלפת גרסאות
 // ==============================================================================
         stage('Update Manifests') {
             steps {
                 container('kubectl') {
                     sh """
-                    # כלי חיתוך טקסט (sed).
-                    # מחפש את המילה latest
-                    # ומחליף אותה במשתנה IMAGE_TAG
+                    # כלי חיתוך טקסט
+                    # מחפש את המילה של גרסת ברירת המחדל
+                    # ומחליף אותה במשתנה החדש של הגרסה
                     # בתוך קבצי הפריסה
                     sed -i "s/mission-backend:latest/mission-backend:${params.IMAGE_TAG}/g" K8S/backend/deployment.yaml
                     sed -i "s/mission-frontend:latest/mission-frontend:${params.IMAGE_TAG}/g" K8S/frontend/deployment.yaml
@@ -95,7 +94,7 @@ spec:
         }
 
 // ==============================================================================
-// 5. פריסה ווידוא יציבות (Deploy & Rollout)
+// 5. Deploy and Rollout - פריסה ווידוא יציבות
 // ==============================================================================
         stage('Deploy') {
             steps {
@@ -124,43 +123,43 @@ spec:
         }
 
 // ==============================================================================
-// 6. שער ניטור אוטומטי (Post-Deploy Monitoring Gate & Rollback)
+// 6. Post-Deploy Monitoring Gate - שער ניטור אוטומטי
 // ==============================================================================
         stage('Post-Deploy Monitoring Gate & Rollback') {
             steps {
                 container('kubectl') {
                     sh '''
-                    echo "🚀 Running Smoke Test to generate initial traffic..."
-                    # מריץ פוד זמני ששולח בקשת אינטרנט ל-Backend כדי לעורר אותו לייצר מדדים
+                    echo "Running Smoke Test to generate initial traffic..."
+                    # מריץ פוד זמני ששולח בקשת אינטרנט לשרת כדי לעורר אותו לייצר מדדים
                     kubectl run smoke-test-pod-gate --rm -i --restart=Never \
                         --namespace=${NAMESPACE} \
                         --image=curlimages/curl:latest \
                         --command -- curl -s --max-time 10 http://backend-service.${NAMESPACE}.svc.cluster.local:5000/health || true
 
-                    echo "⏳ Waiting for Prometheus to scrape target..."
+                    echo "Waiting for Prometheus to scrape target..."
                     # הכתובת הפנימית של שרת פרומתיאוס בקלאסטר
                     PROM_URL="http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090"
                     TARGET_UP="0"
 
-                    # לולאת דגימה: שואלת את פרומתיאוס כל 10 שניות (עד 9 פעמים)
+                    # לולאת דגימה השואלת את פרומתיאוס כל עשר שניות
                     for i in {1..9}; do
                         sleep 10
-                        # שיגור שאילתת חילוץ נתונים מול ה-API של פרומתיאוס. שימוש ב-jq לחילוץ הערך המדויק מה-JSON.
+                        # שיגור שאילתת חילוץ נתונים מול השרת. שימוש בכלי עזר לחילוץ הערך המדויק מהתשובה
                         TARGET_UP=$(curl -s -G "$PROM_URL/api/v1/query" --data-urlencode "query=max(up{namespace='${NAMESPACE}'} or up{kubernetes_namespace='${NAMESPACE}'} or up{job=~'.*backend.*'})" | jq -r '.data.result[0].value[1] // "0"')
 
                         if [[ "$TARGET_UP" == "1" ]]; then
-                            echo "✅ Prometheus detected target as UP!"
+                            echo "Prometheus detected target as UP!"
                             break
                         fi
                     done
 
-                    # אם פרומתיאוס מדווח על 0 (המערכת למטה), מתבצעת חזרה לגרסה הקודמת
+                    # אם פרומתיאוס מדווח על אפס המערכת למטה, מתבצעת חזרה לגרסה הקודמת
                     if [[ "$TARGET_UP" != "1" ]]; then
-                        echo "🚨 ALERT: Target is DOWN! Initiating automatic Rollback..."
+                        echo "ALERT: Target is DOWN! Initiating automatic Rollback..."
                         kubectl rollout undo deployment/backend -n ${NAMESPACE}
                         kubectl rollout undo deployment/frontend -n ${NAMESPACE}
                         kubectl rollout undo deployment/worker -n ${NAMESPACE}
-                        exit 1 # הכשלת התהליך
+                        exit 1
                     fi
                     '''
                 }
