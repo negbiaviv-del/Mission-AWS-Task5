@@ -3,7 +3,7 @@
 # ==============================================================================
 provider "kubernetes" {
   # כתובת ה-API של הקלאסטר שאליה הטרפורם פונה
-  host                   = module.eks.cluster_endpoint
+  host = module.eks.cluster_endpoint
   # תעודת האבטחה שמאפשרת לטרפורם לסמוך על הקלאסטר ולתקשר איתו בצורה מוצפנת
   cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
 
@@ -12,7 +12,7 @@ provider "kubernetes" {
     api_version = "client.authentication.k8s.io/v1beta1"
     command     = "aws"
     # מריץ פקודת AWS CLI ששואבת טוקן זמני, כך שאנחנו לא שומרים סיסמאות קשיחות בקוד
-    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
+    args = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
   }
 }
 
@@ -30,7 +30,7 @@ provider "helm" {
 
     # הכתובת הפיזית של הקלאסטר (ה-API Server)
     # שאליה Helm שולח את פקודות ההתקנה
-    host                   = module.eks.cluster_endpoint
+    host = module.eks.cluster_endpoint
 
     # תעודת האבטחה (CA) של הקלאסטר, שמאפשרת ל-Helm
     # לוודא שהוא מתקשר עם הקלאסטר הנכון ולא עם מתחזה = מוצפן
@@ -44,11 +44,11 @@ provider "helm" {
 
       # אנחנו אומרים ל-Helm:
       # "תריץ את פקודת aws בטרמינל כדי להשיג לעצמך אישור כניסה"
-      command     = "aws"
+      command = "aws"
 
       # הפרמטרים שמועברים לפקודה: פנייה לשירות EKS,
       # ובקשה ספציפית לטוקן (get-token) שמיועד לקלאסטר שלנו
-      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
+      args = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
     }
   }
 }
@@ -58,7 +58,7 @@ provider "helm" {
 # ==============================================================================
 module "networking" {
   # הנתיב שבו הטרפורם ימצא את קבצי המודול הזה (התיקייה המקומית שלנו)
-  source   = "./modules/networking"
+  source = "./modules/networking"
 
   # מעביר למודול את טווח הכתובות הראשי (CIDR)
   # כדי שידע איך לחלק את הסאבנטים
@@ -66,7 +66,7 @@ module "networking" {
 
   # מעביר את ה-IP
   # שלך כדי ליצור חוקי גישה ספציפיים אם צריך
-  my_ip    = var.my_ip
+  my_ip = var.my_ip
 }
 
 # ==============================================================================
@@ -94,13 +94,13 @@ module "iam" {
 # מודול ניהול סודות (Secrets Manager)
 # ==============================================================================
 module "secrets" {
-  source             = "./modules/secrets"
+  source = "./modules/secrets"
   # שם הסוד כפי שיופיע בממשק של אמזון (למשל: aviv-db-password)
-  secret_name        = var.secret_name
+  secret_name = var.secret_name
   # תיאור קצר שיעזור לנו לזהות מה הסוד הזה מכיל
   secret_description = var.secret_description
   # הסיסמה עצמה (שנמשכת מקובץ ה-tfvars המוסתר שלנו) שתישמר מוצפנת בענן
-  db_password        = var.master_db_password
+  db_password = var.master_db_password
 }
 
 # ==============================================================================
@@ -130,7 +130,7 @@ module "rds_postgresql" {
 # מודול דלי אחסון (S3 Bucket)
 # ==============================================================================
 module "s3" {
-  source      = "./modules/s3_bucket"
+  source = "./modules/s3_bucket"
   # השם הייחודי העולמי של דלי האחסון שלנו
   bucket_name = var.bucket_name
 }
@@ -139,9 +139,9 @@ module "s3" {
 # מודול התראות (SNS Topic)
 # ==============================================================================
 module "sns" {
-  source      = "./modules/sns_topic"
+  source = "./modules/sns_topic"
   # השם של נושא ההתראות במערכת
-  topic_name  = "aviv-project-alerts-v2"
+  topic_name = "aviv-project-alerts-v2"
   # האימייל שלך, שאליו אמזון תשלח את ההתראות מהמערכת
   alert_email = var.my_alert_email
 }
@@ -159,7 +159,7 @@ resource "aws_sqs_queue" "worker_queue" {
 # ==============================================================================
 resource "aws_ecr_repository" "backend_repo" {
   # שם המאגר שאליו נדחוף את ה-Image של ה-Backend
-  name         = "mission-backend"
+  name = "mission-backend"
   # מאפשר למחוק את המאגר (ב-terraform destroy) גם אם יש בתוכו תמונות, כדי שלא ניתקע
   force_delete = true
 }
@@ -179,7 +179,7 @@ resource "aws_ecr_repository" "frontend_repo" {
 # ==============================================================================
 resource "random_password" "flask_secret" {
   # מייצר מחרוזת אקראית באורך 20 תווים
-  length  = 20
+  length = 20
   # מאפשר שילוב של תווים מיוחדים (כמו @, #) כדי להקשות על פריצה
   special = true
 }
@@ -202,7 +202,7 @@ resource "kubernetes_namespace" "devops_app" {
 resource "kubernetes_secret" "flask_secret" {
   metadata {
     # שם הסוד שיופיע בקוברנטיס ושנזריק לפודים
-    name      = "flask-secret"
+    name = "flask-secret"
     # משייך את הסוד ל-Namespace
     # שיצרנו, כדי שלא יהיה נגיש לכולם
     namespace = kubernetes_namespace.devops_app.metadata[0].name
@@ -252,13 +252,13 @@ resource "kubernetes_config_map" "app_config" {
 # ==============================================================================
 resource "aws_security_group_rule" "eks_to_rds" {
   # קובע שזהו חוק מסוג "כניסה" (מידע שנכנס ל-RDS)
-  type      = "ingress"
+  type = "ingress"
   # פורט ההתחלה (5432 הוא פורט הדיפולט של PostgreSQL)
   from_port = 5432
   # פורט הסיום (אנחנו פותחים רק פורט אחד)
-  to_port   = 5432
+  to_port = 5432
   # פרוטוקול התקשורת
-  protocol  = "tcp"
+  protocol = "tcp"
 
   # לאיזו חומת אש אנחנו מוסיפים את החוק הזה? לחומת האש של ה-RDS
   security_group_id = module.networking.db_sg_id
@@ -299,8 +299,8 @@ resource "aws_iam_policy" "backend_policy" {
 module "iam_eks_role_backend" {
   # מודול רשמי של אמזון שבונה תפקיד (Role)
   # שמותאם ספציפית לפודים בקוברנטיס
-  source    = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version   = "~> 5.0"
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version = "~> 5.0"
   # השם של ה-Role
   # שיופיע במסך ה-IAM
   # באמזון
@@ -314,7 +314,7 @@ module "iam_eks_role_backend" {
   oidc_providers = {
     main = {
       # חיבור לספק הזהויות של הקלאסטר
-      provider_arn               = module.eks.oidc_provider_arn
+      provider_arn = module.eks.oidc_provider_arn
       # קובע שרק ה-Service Account
       # שנקרא backend-sa
       # יקבל את התפקיד הזה. זה אוטם אבטחתית את הקלאסטר!
@@ -336,8 +336,8 @@ resource "aws_iam_policy" "worker_policy" {
       {
         Effect = "Allow"
         Action = [
-          "s3:GetObject",           # ה-Worker
-                                    # לא כותב נתונים, רק קורא אותם מהדלי לעיבוד
+          "s3:GetObject", # ה-Worker
+          # לא כותב נתונים, רק קורא אותם מהדלי לעיבוד
           "sqs:ReceiveMessage",     # שאיבת משימות מהתור
           "sqs:DeleteMessage",      # מחיקת משימה מהתור אחרי שסיימנו לעבד אותה בהצלחה
           "sqs:GetQueueAttributes", # מאפשר לו לבדוק כמה משימות ממתינות לו
@@ -362,7 +362,7 @@ module "iam_eks_role_worker" {
 
   oidc_providers = {
     main = {
-      provider_arn               = module.eks.oidc_provider_arn
+      provider_arn = module.eks.oidc_provider_arn
       # רק פוד שעולה עם זהות worker-sa
       # יוכל לקרוא/למחוק הודעות מ-SQS
       namespace_service_accounts = ["devops-app:worker-sa"]

@@ -8,12 +8,12 @@
 # ==============================================================================
 module "eks" {
   # ציון המקור: אומר לטרפורם להוריד את קוד ההקמה המוכר והבטוח של AWS
-  source  = "terraform-aws-modules/eks/aws"
+  source = "terraform-aws-modules/eks/aws"
   # ציון גרסת המודול: שומר שהקוד לא ישתנה פתאום בעתיד וישבור לנו דברים
   version = "~> 20.0"
 
   # שם הקלאסטר: השם שיופיע בקונסולה של אמזון ובפקודות שלנו
-  cluster_name    = "aviv-mission-cluster"
+  cluster_name = "aviv-mission-cluster"
   # גרסת קוברנטיס: קובע במדויק איזו גרסת תוכנה תותקן 1.31 למניעת שדרוגים מפתיעים מ-
   # AWS
   cluster_version = "1.31"
@@ -40,16 +40,16 @@ module "eks" {
   eks_managed_node_groups = {
     main_group = {
       # מינימום שרתים: השרת הבודד שתמיד חייב לרוץ, גם אם אין אף גולש באתר
-      min_size       = 1
+      min_size = 1
       # מקסימום שרתים: הגבול העליון לעומס, מונע מצב של חיוב מטורף אם יש עומס פתאומי
-      max_size       = 4
+      max_size = 4
       # גודל רצוי: כמות השרתים שתרוץ ביום-יום כברירת מחדל (4 שרתים)
-      desired_size   = 4
+      desired_size = 4
 
       # סוג החומרה: מגדיר את כוח העיבוד והזיכרון של השרתים (t3.small - זול ומתאים לפיתוח)
       instance_types = ["t3.small"]
       # מערכת הפעלה: קובע שהשרתים ירוצו על לינוקס של אמזון (Amazon Linux 2)
-      ami_type       = "AL2_x86_64"
+      ami_type = "AL2_x86_64"
 
       # תת-בלוק: הרשאות ברמת השרת הפיזי (IAM Role Policies)
       # נותן לשרתים עצמם אישור מאמזון ליצור דיסקים קשיחים (EBS) אם פוד יבקש לשמור קבצים פיזית
@@ -76,7 +76,7 @@ module "eks" {
   # מה הבלוק עושה: מגדיר את מנגנוני הגישה לקלאסטר וממנו.
   # ============================================================================
   # מפעיל את מנגנון ה-IRSA: קריטי! מאפשר לתת הרשאות ספציפיות לפוד מסוים (כמו ל-Worker) במקום לכל השרת
-  enable_irsa                              = true
+  enable_irsa = true
   # נותן לך (מי שמריץ את טרפורם) הרשאות אדמין מלאות לקלאסטר באופן אוטומטי, כדי שלא תינעל בחוץ
   enable_cluster_creator_admin_permissions = true
 
@@ -103,10 +103,10 @@ resource "time_sleep" "wait_for_eks" {
 # מה הבלוק עושה: מתקין נתב פנימי ששולט בתעבורה הנכנסת לקלאסטר מהאינטרנט.
 # ==============================================================================
 resource "helm_release" "nginx_ingress" {
-  name             = "ingress-nginx"
+  name = "ingress-nginx"
   # מאיפה להוריד את קוד ההתקנה (ה-Repository של NGINX)
-  repository       = "https://kubernetes.github.io/ingress-nginx"
-  chart            = "ingress-nginx"
+  repository = "https://kubernetes.github.io/ingress-nginx"
+  chart      = "ingress-nginx"
   # יוצר תיקייה וירטואלית נפרדת (Namespace) בקוברנטיס כדי לשמור על סדר ולא לערבב עם האפליקציה
   namespace        = "ingress-nginx"
   create_namespace = true
@@ -129,10 +129,10 @@ resource "helm_release" "nginx_ingress" {
 # ולשמור אותן בטוחות בקלאסטר.
 # ==============================================================================
 resource "helm_release" "external_secrets" {
-  name             = "external-secrets"
+  name = "external-secrets"
   # מאיפה להוריד את קוד ההתקנה
-  repository       = "https://charts.external-secrets.io"
-  chart            = "external-secrets"
+  repository = "https://charts.external-secrets.io"
+  chart      = "external-secrets"
   # יצירת סביבה וירטואלית נפרדת (Namespace) עבור הרכיב הזה
   namespace        = "external-secrets"
   create_namespace = true

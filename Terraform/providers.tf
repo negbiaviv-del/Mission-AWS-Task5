@@ -8,7 +8,7 @@ terraform {
 
   required_providers {
     aws = {
-      source  = "hashicorp/aws"
+      source = "hashicorp/aws"
       # הגרסה עודכנה ל-5.51.0 ומעלה כדי לתמוך ב-EKS 1.30
       version = ">= 5.51.0"
     }
