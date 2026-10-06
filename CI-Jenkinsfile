@@ -1,190 +1,170 @@
-// ==============================================================================
-// 1. Agent and Environment - סביבת הריצה והמשתנים
-// ==============================================================================
-pipeline {
-    agent {
-        kubernetes {
-            // הגדרת פוד זמני שישמש כשרת הבניה שלנו
-            yaml '''
-apiVersion: v1
-kind: Pod
-metadata:
-  labels:
-    component: ci-agent # תווית לזיהוי הפוד
-spec:
-  serviceAccountName: jenkins # הרשאה לפוד מול קוברנטיס
-  containers:
-  - name: docker
-    image: docker:24.0.5-dind # Docker in Docker
-    securityContext:
-      privileged: true # חובה עבור הרצת דוקר בתוך קונטיינר
-    tty: true
-    env:
-    - name: DOCKER_TLS_CERTDIR
-      value: "" # ביטול הצפנה פנימית למניעת תקלות
-  - name: tools
-    image: hashicorp/terraform:1.5
-    command:
-    - cat
-    tty: true
-  - name: python
-    image: python:3.11-slim
-    command:
-    - cat
-    tty: true
-  - name: trivy
-    image: aquasec/trivy:latest
-    command:
-    - cat
-    tty: true
-'''
-        }
-    }
+# ==============================================================================
+# 1. הגדרות רשת והרשאות (Controller & ServiceAccount)
+# מה הבלוק עושה: חושף את ג'נקינס לעולם דרך
+# LoadBalancer
+# ומחבר אותו להרשאות שיצרנו ב-
+# RBAC.
+# למה צריך את זה: כדי שתוכל לגשת לממשק של ג'נקינס בדפדפן, וכדי שג'נקינס יקבל אישור מקוברנטיס לפרוס את האפליקציה - הוא משתמש בחשבון הקיים ולא יוצר אחד חדש.
+# ==============================================================================
+controller:
+  serviceType: LoadBalancer
+  serviceAccount:
+    create: false
+    name: jenkins-admin
 
-    environment {
-        // כתובת מאגר התמונות שלנו באמזון
-        ECR_REGISTRY = "544471418394.dkr.ecr.us-east-1.amazonaws.com"
-        AWS_REGION = "us-east-1"
-        // יצירת תגית ייחודית מבוססת גיט או מספר בניה
-        IMAGE_TAG = "${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : env.BUILD_NUMBER}"
-    }
+# ==============================================================================
+# 1.5. הבטחת משאבים למניעת קריסות (Resources)
+# מה הבלוק עושה: משריין כמות מינימלית ומקסימלית של זיכרון וכוח עיבוד
+# (CPU) עבור הפוד של ג'נקינס.
+# למה צריך את זה: מונע מפודים אחרים (כמו עבודות CI כבדות) "לחנוק" את ג'נקינס. זה מבטיח
+# שלתהליך ההכנה והורדת הפלאגינים
+# (Init)
+# יהיה תמיד מספיק כוח וזיכרון לרוץ ללא שגיאות Timeout או OOMKilled.
+# ==============================================================================
+  resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "1000m"
+    memory: "2Gi"
 
-    stages {
-// ==============================================================================
-// 2. Checkout - משיכת הקוד
-// ==============================================================================
-        stage('Checkout') {
-            steps {
-                // הורדת הקוד מהמאגר
-                checkout scm
-            }
-        }
+# ==============================================================================
+# 2. אחסון קבוע (Persistence)
+# מה הבלוק עושה: מקצה לג'נקינס כונן קשיח וירטואלי
+# (EBS מסוג gp2) בנפח 8GB.
+# למה צריך את זה: פודים בקוברנטיס נמחקים ונוצרים מחדש. ללא אחסון קבוע, כל היסטוריית הריצות
+# (Builds)
+# וההגדרות של ג'נקינס יימחקו בכל פעם שהפוד נופל או מתעדכן.
+# ==============================================================================
+  persistence:
+    storageClass: "gp2"
+    size: "8Gi"
 
-// ==============================================================================
-// 3. Lint and Validate - בדיקות תקינות
-// ==============================================================================
-        stage('Lint & Validate') {
-            parallel {
-                stage('Terraform') {
-                    steps {
-                        container('tools') {
-                            dir('Terraform') {
-                                sh '''
-                                # בדיקת עיצוב הקוד
-                                terraform fmt -check
-                                # אתחול ללא חיבור לענן
-                                terraform init -backend=false
-                                # בדיקת לוגיקה
-                                terraform validate
-                                '''
-                            }
-                        }
-                    }
-                }
-                stage('Python & YAML') {
-                    steps {
-                        container('python') {
-                            sh '''
-                            # בדיקת קבצי יאמל
-                            pip install yamllint
-                            # קימפול קוד פייתון לבדיקת שגיאות
-                            python -m py_compile Backend/*.py
-                            python -m py_compile Worker/*.py
-                            yamllint K8S/
-                            '''
-                        }
-                    }
-                }
-                stage('Observability configs') {
-                    steps {
-                        container('python') {
-                            sh '''
-                            echo "Validating Dashboards YAML..."
-                            pip install pyyaml
-                            # בדיקת תקינות קובץ הדאשבורד
-                            python -c 'import yaml, sys; yaml.safe_load(open("monitoring/backend-dashboard.yaml"))' || exit 1
+# ==============================================================================
+# 3. הזרקת סודות מאובטחת (Environment Variables)
+# מה הבלוק עושה: מושך את מפתחות הגישה ל-
+# AWS ול-
+# GitHub
+# מתוך הסודות של קוברנטיס, והופך אותם למשתני סביבה בתוך הקונטיינר של ג'נקינס.
+# למה צריך את זה: הדרך הבטוחה ביותר לספק לג'נקינס הרשאות למשוך קוד ולדחוף אימג'ים ל-
+# ECR,
+# מבלי לכתוב סיסמאות כטקסט גלוי בקובץ.
+# ==============================================================================
+  containerEnv:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials-secret
+          key: aws_access_key_id
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials-secret
+          key: aws_secret_access_key
+    - name: GITHUB_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: github-credentials-secret
+          key: github_username
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: github-credentials-secret
+          key: github_token
 
-                            echo "Installing curl..."
-                            apt-get update && apt-get install -y curl
+# ==============================================================================
+# 4. התקנת תוספים אוטומטית (Plugins)
+# מה הבלוק עושה: מורה ל-
+# Helm
+# להתקין מראש רשימה של פלאגינים חיוניים בעת הקמת השרת.
+# למה צריך את זה: חוסך את הצורך להיכנס לממשק של ג'נקינס ולהתקין ידנית כלים כמו התממשקות לגיט, קוברנטיס,
+# AWS
+# ומערכת פרומיתיאוס
+# (עבור ה-ServiceMonitor עברנו עליו קודם).
+# ==============================================================================
+  installPlugins:
+    - kubernetes
+    - workflow-aggregator
+    - git
+    - configuration-as-code
+    - job-dsl
+    - credentials-binding
+    - aws-credentials
+    - pipeline-stage-view
+    - prometheus
 
-                            echo "Extracting Prometheus rules..."
-                            # חילוץ חוקי התראות לבדיקה
-                            python -c 'import yaml; doc = yaml.safe_load(open("monitoring/app-alerts.yaml")); yaml.dump(doc.get("spec", {}), open("monitoring/pure-rules.yaml", "w"))'
-
-                            echo "Validating Prometheus Rules..."
-                            # הרצת כלי רשמי לבדיקת חוקי ההתראות
-                            curl -s -L https://github.com/prometheus/prometheus/releases/download/v2.45.0/prometheus-2.45.0.linux-amd64.tar.gz | tar xz
-                            ./prometheus-2.45.0.linux-amd64/promtool check rules monitoring/pure-rules.yaml
-                            '''
-                        }
-                    }
-                }
-            }
-        }
-
-// ==============================================================================
-// 4. Security Scans - סריקות אבטחה
-// ==============================================================================
-        stage('Security Scans (Trivy)') {
-            steps {
-                container('trivy') {
-                    // סריקת הקבצים לחולשות אבטחה
-                    sh 'trivy fs --format table --exit-code 0 --severity CRITICAL,HIGH .'
-                }
-            }
-        }
-
-// ==============================================================================
-// 5. Build and Push - בניה והעלאה
-// ==============================================================================
-        stage('Build & Push to ECR') {
-            steps {
-                container('docker') {
-                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
-                        sh '''
-                        # הפעלת שירות דוקר ברקע
-                        dockerd &
-                        sleep 10
-
-                        # התקנת כלי אמזון
-                        apk add --no-cache aws-cli
-
-                        # התחברות למאגר התמונות
-                        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
-
-                        # בנית התמונות עם התגית הייחודית
-                        docker build -t $ECR_REGISTRY/mission-backend:$IMAGE_TAG ./Backend
-                        docker build -t $ECR_REGISTRY/mission-frontend:$IMAGE_TAG ./Frontend
-                        docker build -t $ECR_REGISTRY/mission-worker:$IMAGE_TAG ./Worker
-
-                        # העלאת התמונות לענן
-                        docker push $ECR_REGISTRY/mission-backend:$IMAGE_TAG
-                        docker push $ECR_REGISTRY/mission-frontend:$IMAGE_TAG
-                        docker push $ECR_REGISTRY/mission-worker:$IMAGE_TAG
-                        '''
-                    }
-                }
-            }
-        }
-
-// ==============================================================================
-// 6. Publish and Trigger CD - העברת שרביט
-// ==============================================================================
-        stage('Publish Metadata') {
-            steps {
-                // שמירת מספר הגרסה בקובץ
-                writeFile file: 'image_tag.txt', text: "${IMAGE_TAG}"
-                archiveArtifacts artifacts: 'image_tag.txt'
-            }
-        }
-
-        stage('Trigger CD') {
-            steps {
-                // הפעלת תהליך הפריסה והעברת הגרסה הלאה
-                build job: 'Application-CD', parameters: [
-                    string(name: 'IMAGE_TAG', value: "${IMAGE_TAG}")
-                ], wait: false
-            }
-        }
-    }
-}
+# ==============================================================================
+# 5. קינפוג ג'נקינס בקוד (JCasC - Jenkins Configuration as Code)
+# מה הבלוק עושה: אוסף את משתני הסביבה שהזרקנו ומייצר מהם אובייקטים של
+# Credentials
+# בתוך ג'נקינס. בנוסף, הוא יוצר אוטומטית את 2 הפייפליינים
+# (CI ו-CD)
+# שמצביעים למאגר הגיטהאב שלך.
+# למה צריך את זה: זה מה שהופך את הפרויקט שלך ל-
+# "One-Touch".
+# ברגע שהסקריפט מסיים, ג'נקינס קם כשהוא כבר מקונפג במלואו, יודע להתחבר לגיט ולאמזון, ומכיל את עבודות ה-
+# Pipeline
+# מוכנות להרצה.
+# ==============================================================================
+  JCasC:
+    defaultConfig: true
+    configScripts:
+      credentials: |
+        credentials:
+          system:
+            domainCredentials:
+              - credentials:
+                  - aws:
+                      scope: GLOBAL
+                      id: "aws-credentials"
+                      description: "AWS Credentials for ECR"
+                      accessKey: "${AWS_ACCESS_KEY_ID}"
+                      secretKey: "${AWS_SECRET_ACCESS_KEY}"
+                  - usernamePassword:
+                      scope: GLOBAL
+                      id: "github-credentials"
+                      description: "GitHub Credentials for pulling code"
+                      username: "${GITHUB_USERNAME}"
+                      password: "${GITHUB_TOKEN}"
+      setup-jenkins: |
+        jobs:
+          - script: >
+              pipelineJob('Application - CI') {
+                  description('CI Pipeline - Builds Docker images and pushes to ECR')
+                  definition {
+                      cpsScm {
+                          scm {
+                              git {
+                                  remote {
+                                      url('https://github.com/negbiaviv-del/Mission-AWS-Task5.git')
+                                      credentials('github-credentials')
+                                  }
+                                  branch('*/main')
+                              }
+                          }
+                          scriptPath('CI-Jenkinsfile')
+                      }
+                  }
+              }
+          - script: >
+              pipelineJob('Application - CD') {
+                  description('CD Pipeline - Deploys a specific image tag to EKS')
+                  parameters {
+                      stringParam('IMAGE_TAG', '', 'The unique image tag to deploy')
+                  }
+                  definition {
+                      cpsScm {
+                          scm {
+                              git {
+                                  remote {
+                                      url('https://github.com/negbiaviv-del/Mission-AWS-Task5.git')
+                                      credentials('github-credentials')
+                                  }
+                                  branch('*/main')
+                              }
+                          }
+                          scriptPath('CD-Jenkinsfile')
+                      }
+                  }
+              }
