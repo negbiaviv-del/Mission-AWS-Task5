@@ -47,7 +47,7 @@ module "eks" {
       desired_size = 4
 
       # סוג החומרה: מגדיר את כוח העיבוד והזיכרון של השרתים (t3.small - זול ומתאים לפיתוח)
-      instance_types = ["t3.small"]
+      instance_types = ["t3.medium"]
       # מערכת הפעלה: קובע שהשרתים ירוצו על לינוקס של אמזון (Amazon Linux 2)
       ami_type = "AL2_x86_64"
 

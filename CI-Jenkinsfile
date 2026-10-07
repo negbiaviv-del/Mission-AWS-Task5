@@ -14,7 +14,7 @@ metadata:
 spec:
   serviceAccountName: jenkins # הרשאה לפוד לדבר עם קוברנטיס
   containers:
-  - name: docker # קונטיינר ראשון: מריץ את שירות Docker לבניית אימג'ים
+  - name: docker # קונטיינר ראשון: מריץ את שירות Docker לבניית אימגים
     image: docker:24.0.5-dind # DinD = Docker in Docker
     securityContext:
       privileged: true # חובה כדי להריץ שירות דוקר בתוך קונטיינר
@@ -42,10 +42,10 @@ spec:
     }
 
     environment {
-        // הכתובת של רג'יסטרי האימג'ים שלנו באמזון (ECR)
+        // הכתובת של רגיסטרי האימגים שלנו באמזון (ECR)
         ECR_REGISTRY = "544471418394.dkr.ecr.us-east-1.amazonaws.com"
         AWS_REGION = "us-east-1"
-        // ייצור תגית ייחודית: לוקח את 7 התווים הראשונים של מספר הקומיט בגיט, או את מספר הבנייה של ג'נקינס אם אין גיט
+        // ייצור תגית ייחודית: לוקח את 7 התווים הראשונים של מספר הקומיט בגיט, או את מספר הבנייה של גנקינס אם אין גיט
         IMAGE_TAG = "${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : env.BUILD_NUMBER}"
     }
 
@@ -178,7 +178,7 @@ spec:
 // ==============================================================================
         stage('Publish Metadata') {
             steps {
-                // כותב את מספר הגרסה לקובץ טקסט ושומר אותו בארכיון של ג'נקינס
+                // כותב את מספר הגרסה לקובץ טקסט ושומר אותו בארכיון של גנקינס
                 writeFile file: 'image_tag.txt', text: "${IMAGE_TAG}"
                 archiveArtifacts artifacts: 'image_tag.txt'
             }
@@ -186,10 +186,10 @@ spec:
 
         stage('Trigger CD') {
             steps {
-                // מפעיל את הג'וב של ה-CD ומעביר אליו את מספר הגרסה כדי שידע מה לפרוס
+                // מפעיל את הגוב של ה-CD ומעביר אליו את מספר הגרסה כדי שידע מה לפרוס
                 build job: 'Application - CD', parameters: [
                     string(name: 'IMAGE_TAG', value: "${IMAGE_TAG}")
-                ], wait: false // לא מחכה שה-CD יסתיים כדי לסיים את הג'וב הנוכחי
+                ], wait: false // לא מחכה שה-CD יסתיים כדי לסיים את הגוב הנוכחי
             }
         }
     }
