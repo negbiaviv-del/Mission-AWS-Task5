@@ -114,9 +114,9 @@ spec:
                 container('kubectl') {
                     sh '''
                     # המתנה עד 3 דקות כדי שקוברנטיס יאשר שהפודים החדשים רצים ותקינים
-                    kubectl rollout status deployment/backend -n ${NAMESPACE} --timeout=180s
-                    kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=180s
-                    kubectl rollout status deployment/worker -n ${NAMESPACE} --timeout=180s
+                    kubectl rollout status deployment/backend -n ${NAMESPACE} --timeout=300s
+                    kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=300s
+                    kubectl rollout status deployment/worker -n ${NAMESPACE} --timeout=300s
                     '''
                 }
             }

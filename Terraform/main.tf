@@ -371,13 +371,21 @@ module "iam_eks_role_worker" {
 }
 
 # ==============================================================================
+# השהיה יזומה למניעת בעיות תזמון (Race Condition) בהרשאות קוברנטיס
+# ==============================================================================
+resource "time_sleep" "wait_for_cluster_auth" {
+  # ממתין 60 שניות *רק אחרי* שמודול ה-EKS סיים להיות מוקם
+  depends_on      = [module.eks]
+  create_duration = "60s"
+}
+
+# ==============================================================================
 # הקצאת הרשאות בקלאסטר (RBAC)
 # עבור שרת ה-Jenkins
 # ==============================================================================
 resource "kubernetes_cluster_role_binding" "jenkins_deployer" {
   metadata {
-    # שם החיבור (Binding)
-    # שמאחד בין תפקיד לבין משתמש
+    # שם החיבור (Binding) שמאחד בין תפקיד לבין משתמש
     name = "jenkins-deployer-binding"
   }
 
@@ -392,11 +400,11 @@ resource "kubernetes_cluster_role_binding" "jenkins_deployer" {
   subject {
     # אנחנו מצמידים את הרשאות האדמין למשתמש מיוחד (Service Account)
     # שנקרא jenkins.
-    # זה מאפשר לשרת ה-Jenkins
-    # להריץ פקודות kubectl
-    # בתוך הקלאסטר כדי לעדכן קוד.
     kind      = "ServiceAccount"
     name      = "jenkins"
     namespace = "jenkins"
   }
+
+  # השורה שנוספה: מחכה שההשהיה של 60 השניות תסתיים לפני יצירת המשאב
+  depends_on = [time_sleep.wait_for_cluster_auth]
 }

@@ -40,6 +40,9 @@ echo "⚙️ Phase 4: Bootstrapping Jenkins CI/CD & Triggering Automation"
 chmod +x runbooks/install-jenkins.sh
 ./runbooks/install-jenkins.sh | tee install-jenkins.log
 
+echo "⏳ Waiting 120 seconds for Jenkins to fully initialize..."
+sleep 120
+
 # ==============================================================================
 # 3. סיכום וניקוי (Summary & Cleanup)
 # ==============================================================================

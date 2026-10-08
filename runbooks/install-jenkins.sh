@@ -175,6 +175,7 @@ done
 # חודר לתוך הפוד של ג'נקינס בקלאסטר כדי לקרוא את קובץ סיסמת מנהל המערכת ההתחלתית, ושומר אותה במשתנה מקומי.
 echo "🔑 Extracting Jenkins Admin Password..."
 JENKINS_PASSWORD=$(kubectl exec --namespace jenkins -it svc/jenkins -c jenkins -- /bin/cat /run/secrets/additional/chart-admin-password | tr -d '\r')
+
 # ==============================================================================
 # 5. הגדרת
 # Webhook
