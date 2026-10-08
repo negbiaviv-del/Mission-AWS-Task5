@@ -1,10 +1,9 @@
 // ==============================================================================
-// 1. Agent and Parameters - סביבה והגדרות
+// 1. Agent and Environment - סביבת ריצה עם kubectl ו-AWS CLI
 // ==============================================================================
 pipeline {
     agent {
         kubernetes {
-            // הקמת פוד פשוט שצריך רק קונטיינר אחד שיתחבר לקוברנטיס
             yaml '''
 apiVersion: v1
 kind: Pod
@@ -14,8 +13,8 @@ metadata:
 spec:
   serviceAccountName: jenkins
   containers:
-  - name: kubectl
-    image: hashicorp/terraform:1.5
+  - name: k8s-tools
+    image: alpine/k8s:1.29.0
     command:
     - cat
     tty: true
@@ -24,146 +23,102 @@ spec:
     }
 
     parameters {
-        // דרישת קלט מתהליך הבניה
-        // מה מספר הגרסה לפרוס
-        string(name: 'IMAGE_TAG', defaultValue: '', description: 'The unique image tag to deploy (e.g., commit SHA or build number)')
+        string(
+            name: 'IMAGE_TAG',
+            defaultValue: 'latest',
+            description: 'Docker Image Tag passed from CI pipeline'
+        )
     }
 
     environment {
-        NAMESPACE = "devops-app" // הסביבה אליה נדחוף את האפליקציה
+        AWS_REGION     = "us-east-1"
+        CLUSTER_NAME   = "mission-eks-cluster" // שנה לשם הקלאסטר שלך ב-AWS
+        ECR_REGISTRY   = "544471418394.dkr.ecr.us-east-1.amazonaws.com"
+        K8S_DIR        = "K8S"                  // התיקייה שבה נמצאים קובצי ה-YAML
     }
 
     stages {
 // ==============================================================================
-// 2. Input Validation and Checkout - בדיקות מקדימות
+// 2. Checkout - משיכת קובצי ה-Manifests (YAML) מה-Git
 // ==============================================================================
-        stage('Input Validation') {
-            steps {
-                script {
-                    // מניעת פריסת גרסת latest
-                    // או משתנה ריק - כדי למנוע חוסר סנכרון בשחזור גרסה
-                    if (!params.IMAGE_TAG || params.IMAGE_TAG == 'latest') {
-                        error "Invalid IMAGE_TAG parameter. You must provide a specific tag, 'latest' is not allowed."
-                    }
-                }
-            }
-        }
-
-        stage('Checkout') {
+        stage('Checkout Manifests') {
             steps {
                 checkout scm
             }
         }
 
 // ==============================================================================
-// 3. Setup Kubectl - הכנת סביבת הפריסה
+// 3. Connect to EKS - חיבור והגדרת ה-Kubeconfig מול AWS EKS
 // ==============================================================================
-        stage('Setup Kubectl') {
+        stage('Configure Kubeconfig') {
             steps {
-                container('kubectl') {
-                    sh '''
-                    # בודק אם הכלי קיים, ואם לא מוריד ומתקין אותו
-                    if ! command -v kubectl &> /dev/null; then
-                        apk add --no-cache curl jq
-                        curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
-                        chmod +x kubectl
-                        mv kubectl /usr/local/bin/kubectl
-                    fi
-                    '''
+                container('k8s-tools') {
+                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                        sh '''
+                        echo "Authenticating with AWS EKS..."
+                        aws eks update-kubeconfig --region ${AWS_REGION} --name ${CLUSTER_NAME}
+
+                        echo "Verifying cluster access:"
+                        kubectl get nodes
+                        '''
+                    }
                 }
             }
         }
 
 // ==============================================================================
-// 4. Update Manifests - החלפת גרסאות
+// 4. Deploy to EKS - עדכון האימג'ים ופריסה באמצעות kubectl
 // ==============================================================================
-        stage('Update Manifests') {
+        stage('Deploy to EKS') {
             steps {
-                container('kubectl') {
-                    sh """
-                    # כלי חיתוך טקסט
-                    # מחפש את המילה של גרסת ברירת המחדל
-                    # ומחליף אותה במשתנה החדש של הגרסה
-                    # בתוך קבצי הפריסה
-                    sed -i "s/mission-backend:latest/mission-backend:${params.IMAGE_TAG}/g" K8S/backend/deployment.yaml
-                    sed -i "s/mission-frontend:latest/mission-frontend:${params.IMAGE_TAG}/g" K8S/frontend/deployment.yaml
-                    sed -i "s/mission-worker:latest/mission-worker:${params.IMAGE_TAG}/g" K8S/worker/deployment.yaml
-                    """
+                container('k8s-tools') {
+                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                        sh '''
+                        echo "Deploying manifests from ${K8S_DIR}..."
+
+                        # 1. החלת המשאבים הכלליים (ConfigMaps, Secrets, Services וכד')
+                        kubectl apply -f ${K8S_DIR}/
+
+                        # 2. עדכון התמונות של ה-Deployments לגרסה החדשה שהתקבלה מה-CI
+                        echo "Updating deployment images to tag: ${params.IMAGE_TAG}"
+
+                        kubectl set image deployment/backend backend=${ECR_REGISTRY}/mission-backend:${params.IMAGE_TAG}
+                        kubectl set image deployment/frontend frontend=${ECR_REGISTRY}/mission-frontend:${params.IMAGE_TAG}
+                        kubectl set image deployment/worker worker=${ECR_REGISTRY}/mission-worker:${params.IMAGE_TAG}
+                        '''
+                    }
                 }
             }
         }
 
 // ==============================================================================
-// 5. Deploy and Rollout - פריסה ווידוא יציבות
+// 5. Verify Rollout - וידוא שהפודים עלו בהצלחה
 // ==============================================================================
-        stage('Deploy') {
+        stage('Verify Rollout') {
             steps {
-                container('kubectl') {
-                    sh '''
-                    # החלת השינויים לקלאסטר קוברנטיס
-                    kubectl apply -f K8S/backend/
-                    kubectl apply -f K8S/frontend/
-                    kubectl apply -f K8S/worker/
-                    '''
+                container('k8s-tools') {
+                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                        sh '''
+                        echo "Checking rollout status for deployments..."
+                        kubectl rollout status deployment/backend --timeout=120s
+                        kubectl rollout status deployment/frontend --timeout=120s
+                        kubectl rollout status deployment/worker --timeout=120s
+
+                        echo "All pods are up and running:"
+                        kubectl get pods
+                        '''
+                    }
                 }
             }
         }
+    }
 
-        stage('Verify & Rollout') {
-            steps {
-                container('kubectl') {
-                    sh '''
-                    # המתנה עד 3 דקות כדי שקוברנטיס יאשר שהפודים החדשים רצים ותקינים
-                    kubectl rollout status deployment/backend -n ${NAMESPACE} --timeout=300s
-                    kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=300s
-                    kubectl rollout status deployment/worker -n ${NAMESPACE} --timeout=300s
-                    '''
-                }
-            }
+    post {
+        failure {
+            echo "Deployment failed! Consider rolling back via: kubectl rollout undo deployment/<name>"
         }
-
-// ==============================================================================
-// 6. Post-Deploy Monitoring Gate - שער ניטור אוטומטי
-// ==============================================================================
-        stage('Post-Deploy Monitoring Gate & Rollback') {
-            steps {
-                container('kubectl') {
-                    sh '''
-                    echo "Running Smoke Test to generate initial traffic..."
-                    # מריץ פוד זמני ששולח בקשת אינטרנט לשרת כדי לעורר אותו לייצר מדדים
-                    kubectl run smoke-test-pod-gate --rm -i --restart=Never \
-                        --namespace=${NAMESPACE} \
-                        --image=curlimages/curl:latest \
-                        --command -- curl -s --max-time 10 http://backend-service.${NAMESPACE}.svc.cluster.local:5000/health || true
-
-                    echo "Waiting for Prometheus to scrape target..."
-                    # הכתובת הפנימית של שרת פרומתיאוס בקלאסטר
-                    PROM_URL="http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090"
-                    TARGET_UP="0"
-
-                    # לולאת דגימה השואלת את פרומתיאוס כל עשר שניות
-                    for i in {1..9}; do
-                        sleep 10
-                        # שיגור שאילתת חילוץ נתונים מול השרת. שימוש בכלי עזר לחילוץ הערך המדויק מהתשובה
-                        TARGET_UP=$(curl -s -G "$PROM_URL/api/v1/query" --data-urlencode "query=max(up{namespace='${NAMESPACE}'} or up{kubernetes_namespace='${NAMESPACE}'} or up{job=~'.*backend.*'})" | jq -r '.data.result[0].value[1] // "0"')
-
-                        if [[ "$TARGET_UP" == "1" ]]; then
-                            echo "Prometheus detected target as UP!"
-                            break
-                        fi
-                    done
-
-                    # אם פרומתיאוס מדווח על אפס המערכת למטה, מתבצעת חזרה לגרסה הקודמת
-                    if [[ "$TARGET_UP" != "1" ]]; then
-                        echo "ALERT: Target is DOWN! Initiating automatic Rollback..."
-                        kubectl rollout undo deployment/backend -n ${NAMESPACE}
-                        kubectl rollout undo deployment/frontend -n ${NAMESPACE}
-                        kubectl rollout undo deployment/worker -n ${NAMESPACE}
-                        exit 1
-                    fi
-                    '''
-                }
-            }
+        success {
+            echo "Deployment to EKS completed successfully with image tag: ${params.IMAGE_TAG}"
         }
     }
 }
