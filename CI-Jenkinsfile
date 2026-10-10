@@ -191,9 +191,9 @@ spec:
                 writeFile file: 'image_tag.txt', text: "${IMAGE_TAG}"
                 archiveArtifacts artifacts: 'image_tag.txt'
 
-                // קריאה אוטומטית ל-Job של ה-CD 
+                // קריאה אוטומטית ל-Job של ה-CD
                 // והעברת ה-IMAGE_TAG כפרמטר, כדי שה-CD יידע איזו גרסה למשוך ולפרוס
-                build job: 'Application-CD', parameters: [
+                build job: 'Application - CD', parameters: [
                     string(name: 'IMAGE_TAG', value: "${IMAGE_TAG}")
                 ], wait: false // לא מחכים שה-CD יסתיים כדי לסמן את ה-CI כמוצלח
             }
