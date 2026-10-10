@@ -17,6 +17,16 @@ metadata:
     app: backend
 spec:
   replicas: 2
+# ==============================================================================
+# 1.5 אסטרטגיית עדכון (Rolling Update) - **התוספת החדשה**
+# מה הבלוק עושה: מבטיח שתמיד יהיו פודים זמינים בזמן עדכון גרסה.
+# פוד חדש יקבל את כל ההרשאות ויעלה לחלוטין לפני שהישן נמחק.
+# ==============================================================================
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: backend
@@ -56,21 +66,21 @@ spec:
 # ואז נעלם. זהו פתרון אבטחה אלגנטי מאוד.
 # ==============================================================================
       initContainers:
-        - name: init-home
-          image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-backend:latest
-          securityContext:
-            runAsNonRoot: false
-            runAsUser: 0
-          command: ["/bin/sh", "-c"]
-          args:
-            - >
-              mkdir -p /tmp/newhome/.postgresql &&
-              cp /home/appuser/.postgresql/* /tmp/newhome/.postgresql/ 2>/dev/null || true &&
-              chown -R 1000:1000 /tmp/newhome &&
-              chmod 600 /tmp/newhome/.postgresql/* 2>/dev/null || true
-          volumeMounts:
-            - name: new-home-vol
-              mountPath: /tmp/newhome
+      - name: init-home
+        image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-backend:latest
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+        command: ["/bin/sh", "-c"]
+        args:
+        - >
+          mkdir -p /tmp/newhome/.postgresql &&
+          cp /home/appuser/.postgresql/* /tmp/newhome/.postgresql/ 2>/dev/null || true &&
+          chown -R 1000:1000 /tmp/newhome &&
+          chmod 600 /tmp/newhome/.postgresql/* 2>/dev/null || true
+        volumeMounts:
+        - name: new-home-vol
+          mountPath: /tmp/newhome
 
 # ==============================================================================
 # 4. הקונטיינר הראשי - אפליקציית ה-
@@ -78,16 +88,16 @@ spec:
 # מה הבלוק עושה: מגדיר את השרת עצמו, מושך את האימג', ומקשיח את האבטחה ברמת הקונטיינר.
 # ==============================================================================
       containers:
-        - name: backend
-          image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-backend:latest
-          imagePullPolicy: Always
-          ports:
-            - containerPort: 5000
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+      - name: backend
+        image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
 # ==============================================================================
 # 5. הזרקת סודות ומשתני סביבה (Environment Variables & Secrets)
 # מה הבלוק עושה: טוען נתונים מקובץ ה-
@@ -99,16 +109,16 @@ spec:
 # (פרקטיקת 12-Factor App)
 # ושומר על סיסמאות מסד הנתונים מוסתרות ומאובטחות.
 # ==============================================================================
-          env:
-            - name: HOME
-              value: "/tmp/newhome"
-          envFrom:
-            - configMapRef:
-                name: app-config
-            - secretRef:
-                name: db-app-secrets
-            - secretRef:
-                name: flask-secret
+        env:
+        - name: HOME
+          value: "/tmp/newhome"
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: db-app-secrets
+        - secretRef:
+            name: flask-secret
 
 # ==============================================================================
 # 6. ניהול משאבים (Resource Requests & Limits)
@@ -119,16 +129,16 @@ spec:
 # (Node)
 # ומפיל פודים אחרים שרצים לידו.
 # ==============================================================================
-          resources:
-            requests:
-              memory: "128Mi"
-              cpu: "100m"
-            limits:
-              memory: "256Mi"
-              cpu: "250m"
-          volumeMounts:
-            - name: new-home-vol
-              mountPath: /tmp/newhome
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+        volumeMounts:
+        - name: new-home-vol
+          mountPath: /tmp/newhome
 
 # ==============================================================================
 # 7. בדיקות תקינות (Health Probes)
@@ -140,18 +150,18 @@ spec:
 # Liveness: אם השרת נתקע, קוברנטיס יזהה זאת ויבצע ריסטארט אוטומטי לפוד
 # (Self-Healing).
 # ==============================================================================
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 5000
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 5000
-            initialDelaySeconds: 15
-            periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 15
 
 # ==============================================================================
 # 8. הגדרת נפחי אחסון זמניים (Volumes)
@@ -161,5 +171,5 @@ spec:
 # למה צריך את זה: מאפשר שיתוף קבצים מאובטח בין קונטיינר ההכנה - שהעתיק את ההרשאות לקונטיינר הראשי שניגש אליהן בסעיף 4.
 # ==============================================================================
       volumes:
-        - name: new-home-vol
-          emptyDir: {}
+      - name: new-home-vol
+        emptyDir: {}

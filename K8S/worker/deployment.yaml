@@ -13,6 +13,15 @@ metadata:
     app: worker
 spec:
   replicas: 1
+# ==============================================================================
+# 1.5 אסטרטגיית עדכון (Rolling Update) - **התוספת החדשה**
+# רציפות בעבודה: קוברנטיס יקים פוד Worker חדש שמתחבר לסודות ולהרשאות, ורק כשהוא מוכן ימחוק את הישן.
+# ==============================================================================
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: worker
@@ -40,35 +49,35 @@ spec:
 # משיכת הקוד והזרקת הגדרות וסודות מהקלאסטר.
 # ==============================================================================
       containers:
-        - name: worker
-          # התגית תוחלף דינמית על ידי סקריפט ה-bash
-          image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-worker:latest
-          imagePullPolicy: Always
-          envFrom:
-            - configMapRef:
-                name: app-config
-            # קריאה לשני הסודות הנפרדים שלנו
-            - secretRef:
-                name: db-app-secrets
-            - secretRef:
-                name: flask-secret
+      - name: worker
+        # התגית תוחלף דינמית על ידי סקריפט ה-bash
+        image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-worker:latest
+        imagePullPolicy: Always
+        envFrom:
+        - configMapRef:
+            name: app-config
+        # קריאה לשני הסודות הנפרדים שלנו
+        - secretRef:
+            name: db-app-secrets
+        - secretRef:
+            name: flask-secret
 # ==============================================================================
 # 4. הקשחת קונטיינר (Security Context):
 # חסימת הסלמת הרשאות וניקוי יכולות מערכת לינוקס.
 # ==============================================================================
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
 # ==============================================================================
 # 5. ניהול משאבים (Resource Limits):
 # הגדרת רף מינימום ומקסימום למניעת צריכת יתר.
 # ==============================================================================
-          resources:
-            requests:
-              memory: "128Mi"
-              cpu: "100m"
-            limits:
-              memory: "256Mi"
-              cpu: "250m"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"

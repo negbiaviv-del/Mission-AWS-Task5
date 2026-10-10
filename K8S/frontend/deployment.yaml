@@ -13,6 +13,16 @@ metadata:
     app: frontend
 spec:
   replicas: 2
+# ==============================================================================
+# 1.5 אסטרטגיית עדכון (Rolling Update) - **התוספת החדשה**
+# שומר על זמינות מלאה בזמן עדכון גרסה.
+# פוד חדש נדלק ונבדק, ורק כשהוא מוכן ב-100%, הפוד הישן נמחק.
+# ==============================================================================
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: frontend
@@ -43,11 +53,11 @@ spec:
 # כדי להורות לקוברנטיס מאיפה למשוך את הקוד ובאיזה פורט האתר מקבל את התעבורה.
 # ==============================================================================
       containers:
-        - name: frontend
-          image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-frontend:latest
-          imagePullPolicy: Always
-          ports:
-            - containerPort: 8080
+      - name: frontend
+        image: 544471418394.dkr.ecr.us-east-1.amazonaws.com/mission-frontend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
 # ==============================================================================
 # 4. בדיקות תקינות (Health Probes):
 # ניטור רציף של זמינות עמוד הבית לניתוב תעבורה בטוח.
@@ -55,18 +65,18 @@ spec:
 # (Self-Healing),
 # וינתב אליו גולשים רק כשהוא באמת מוכן.
 # ==============================================================================
-          livenessProbe:
-            httpGet:
-              path: /
-              port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /
-              port: 8080
-            initialDelaySeconds: 3
-            periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 5
 # ==============================================================================
 # 5. הקשחת קונטיינר (Security Context):
 # חסימת הסלמת הרשאות וניקוי יכולות מערכת לינוקס.
@@ -74,20 +84,20 @@ spec:
 # (Root)
 # על השרת המארח.
 # ==============================================================================
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
 # ==============================================================================
 # 6. ניהול משאבים (Resource Limits):
 # הגדרת רף מינימום ומקסימום לצריכת מעבד וזיכרון.
 # כדי למנוע מהאתר להאט או לקרוס עקב עומס יתר על השרת המארח.
 # ==============================================================================
-          resources:
-            requests:
-              memory: "128Mi"
-              cpu: "100m"
-            limits:
-              memory: "256Mi"
-              cpu: "250m"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
