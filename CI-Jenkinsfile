@@ -35,6 +35,12 @@ spec:
         }
     }
 
+    // הוספת מנגנון הדגימה האוטומטי מול Git
+    triggers {
+        // ביטוי ה-Cron אומר: "תדגום את ה-Git כל דקה" (* * * * *)
+        pollSCM('* * * * *')
+    }
+
     environment {
         ECR_REGISTRY = "544471418394.dkr.ecr.us-east-1.amazonaws.com"
         AWS_REGION = "us-east-1"
@@ -158,7 +164,7 @@ spec:
                 writeFile file: 'image_tag.txt', text: "${IMAGE_TAG}"
                 archiveArtifacts artifacts: 'image_tag.txt'
 
-                build job: 'Application - CD', parameters: [
+                build job: 'Application-CD', parameters: [
                     string(name: 'IMAGE_TAG', value: "${IMAGE_TAG}")
                 ], wait: false
             }
