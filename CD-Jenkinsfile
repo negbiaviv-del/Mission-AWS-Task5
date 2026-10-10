@@ -94,7 +94,7 @@ spec:
         }
 
 // ==============================================================================
-// 5. Deploy  פריסה 
+// 5. Deploy and Rollout - פריסה ווידוא יציבות
 // ==============================================================================
         stage('Deploy') {
             steps {
@@ -109,6 +109,18 @@ spec:
             }
         }
 
+        stage('Verify & Rollout') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                    # המתנה עד 5 דקות כדי שקוברנטיס יאשר שהפודים החדשים רצים ותקינים
+                    kubectl rollout status deployment/backend -n ${NAMESPACE} --timeout=300s
+                    kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=300s
+                    kubectl rollout status deployment/worker -n ${NAMESPACE} --timeout=300s
+                    '''
+                }
+            }
+        }
 
 // ==============================================================================
 // 6. Post-Deploy Monitoring Gate - שער ניטור אוטומטי

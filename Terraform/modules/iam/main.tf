@@ -139,3 +139,49 @@ resource "aws_iam_role_policy" "worker_permissions" {
     ]
   })
 }
+
+# ==============================================================================
+# יצירת IAM Role נפרד ומאובטח עבור ה-Alertmanager
+# ==============================================================================
+resource "aws_iam_role" "alertmanager_role" {
+  name = "alertmanager-irsa-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Effect = "Allow"
+        Principal = {
+          Federated = var.oidc_provider_arn
+        }
+        Condition = {
+          StringEquals = {
+            # שים לב ל-Namespace (observability) ולשם ה-ServiceAccount
+            "${replace(var.cluster_oidc_issuer_url, "https://", "")}:sub" : "system:serviceaccount:observability:alertmanager-sa",
+            "${replace(var.cluster_oidc_issuer_url, "https://", "")}:aud" : "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}
+
+# ==============================================================================
+# פוליסת הרשאות מדויקת עבור ה-Alertmanager (Least Privilege)
+# ==============================================================================
+resource "aws_iam_role_policy" "alertmanager_sns_policy" {
+  name = "alertmanager-sns-policy"
+  role = aws_iam_role.alertmanager_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "sns:Publish"
+        Resource = var.sns_topic_arn
+      }
+    ]
+  })
+}

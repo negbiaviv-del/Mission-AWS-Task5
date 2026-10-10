@@ -61,23 +61,40 @@ grafana:
 
 # ==============================================================================
 # 3. מנהל ההתראות (Alertmanager):
-# ניתוב התראות, יעדי סרק
-# (Dummy)
-# ואחסון היסטוריית מצבים.
+# ניתוב התראות ל-SNS ואחסון היסטוריית מצבים.
 # ==============================================================================
 alertmanager:
+  enabled: true
+
+  serviceAccount:
+    create: true
+    name: "alertmanager-sa"
+    annotations:
+      eks.amazonaws.com/role-arn: "arn:aws:iam::544471418394:role/alertmanager-irsa-role"
+
   config:
     global:
       resolve_timeout: 5m
     route:
-      group_by: ['job']
+      group_by: ['alertname', 'job']
       group_wait: 30s
       group_interval: 5m
-      repeat_interval: 12h
-      # הגדרת יעד חסר משמעות כפי שנדרש (Dummy Receiver)
-      receiver: 'dummy-receiver'
+      repeat_interval: 4h
+      receiver: 'aws-sns-alerts'
+
     receivers:
-    - name: 'dummy-receiver'
+    # מחזירים את נמען ה-null כדי שפרומתיאוס יוכל לזרוק אליו התראות פנימיות
+    - name: 'null'
+    - name: 'aws-sns-alerts'
+      sns_configs:
+      - topic_arn: "arn:aws:sns:us-east-1:544471418394:aviv-project-alerts-v2"
+        sigv4:
+          region: "us-east-1"
+        subject: "[{{ .Status | toUpper }}] Prometheus Alert: {{ .GroupLabels.alertname }}"
+        message: |
+          Alert: {{ .GroupLabels.alertname }}
+          Description: {{ .CommonAnnotations.description }}
+          Status: {{ .Status }}
 
   alertmanagerSpec:
     storage:
@@ -88,3 +105,10 @@ alertmanager:
           resources:
             requests:
               storage: 2Gi
+
+# הוסף את השורות האלו בסוף או בהתחלה של הקובץ prometheus-values.yaml
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
