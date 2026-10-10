@@ -164,7 +164,7 @@ spec:
                 writeFile file: 'image_tag.txt', text: "${IMAGE_TAG}"
                 archiveArtifacts artifacts: 'image_tag.txt'
 
-                build job: 'Application-CD', parameters: [
+                build job: 'Application - CD', parameters: [
                     string(name: 'IMAGE_TAG', value: "${IMAGE_TAG}")
                 ], wait: false
             }
