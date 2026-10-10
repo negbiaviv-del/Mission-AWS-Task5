@@ -1,7 +1,9 @@
 // ==============================================================================
-// 1. Agent and Environment - סביבת הריצה והמשתנים
+// 1. הגדרות סביבה, סוכן (Agent) וטריגרים
+// בלוק זה מגדיר איפה ה-Pipeline ירוץ, אילו כלים יהיו זמינים לו, ומתי הוא יופעל.
 // ==============================================================================
 pipeline {
+    // הגדרת סוכן מסוג Kubernetes שייצור פוד זמני עבור ריצת ה-CI
     agent {
         kubernetes {
             yaml '''
@@ -12,21 +14,22 @@ metadata:
     component: ci-agent
 spec:
   serviceAccountName: jenkins
+  # הגדרת 3 קונטיינרים נפרדים בתוך הפוד, כל אחד עם תפקיד אחר
   containers:
-  - name: docker
+  - name: docker # משמש לבניית התמונות ודחיפתן
     image: docker:24.0.5-dind
     securityContext:
-      privileged: true
+      privileged: true # נדרש כדי להריץ דוקר בתוך דוקר
     tty: true
     env:
     - name: DOCKER_TLS_CERTDIR
       value: ""
-  - name: python
+  - name: python # משמש לבדיקות הקוד (Linting) של פייתון
     image: python:3.11-slim
     command:
     - cat
     tty: true
-  - name: trivy
+  - name: trivy # משמש לסריקת אבטחה של התמונות לפני העלאתן
     image: aquasec/trivy:latest
     command:
     - cat
@@ -35,21 +38,25 @@ spec:
         }
     }
 
-    // הוספת מנגנון הדגימה האוטומטי מול Git
+    // הגדרת מנגנון הדגימה האוטומטי (SCM Polling)
+    // Jenkins יבדוק ב-GitHub כל דקה אם יש קוד חדש.
     triggers {
-        // ביטוי ה-Cron אומר: "תדגום את ה-Git כל דקה" (* * * * *)
         pollSCM('* * * * *')
     }
 
+    // משתני סביבה גלובליים שישמשו את כל השלבים
     environment {
+        // הכתובת של ה-ECR שלך באמזון
         ECR_REGISTRY = "544471418394.dkr.ecr.us-east-1.amazonaws.com"
         AWS_REGION = "us-east-1"
+        // יצירת תגית ייחודית לתמונות - שימוש ב-7 התווים הראשונים של ה-Commit מ-Git, או במספר ה-Build אם אין חיבור ל-Git
         IMAGE_TAG = "${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : env.BUILD_NUMBER}"
     }
 
     stages {
 // ==============================================================================
-// 2. Checkout - משיכת הקוד
+// 2. משיכת הקוד (Checkout)
+// שלב זה מוריד את הקוד העדכני ביותר מ-GitHub אל תוך פוד הריצה של Jenkins.
 // ==============================================================================
         stage('Checkout') {
             steps {
@@ -58,22 +65,27 @@ spec:
         }
 
 // ==============================================================================
-// 3. Lint & Validate - בדיקות תקינות לקוד האפליקציה בלבד
+// 3. בדיקות תקינות קוד (Lint & Validate)
+// שלב זה מוודא שאין שגיאות תחביר בקוד הפייתון או בקבצי ה-YAML לפני שמתחילים לבנות.
 // ==============================================================================
         stage('Lint & Validate') {
             steps {
+                // שימוש בקונטיינר של הפייתון לצורך הבדיקות
                 container('python') {
                     sh '''
                     echo "Installing linters..."
                     pip install yamllint
 
                     echo "Linting Backend (Python)..."
+                    # בדיקת תחביר בסיסית לקבצי הפייתון של ה-Backend
                     python -m py_compile Backend/*.py
 
                     echo "Linting Worker (Python)..."
+                    # בדיקת תחביר בסיסית לקבצי הפייתון של ה-Worker
                     python -m py_compile Worker/*.py
 
                     echo "Linting Frontend (Configs)..."
+                    # בדיקת תקינות למבנה קבצי ה-YAML (מתעלם משגיאות במכוון כדי לא לעצור את התהליך)
                     yamllint Frontend/ || true
                     '''
                 }
@@ -81,22 +93,26 @@ spec:
         }
 
 // ==============================================================================
-// 4. Build Images - בניית התמונות
+// 4. בניית התמונות ושמירתן (Build Images)
+// שלב זה אורז את הקוד החדש לתוך תמונות Docker מקומיות, ושומר אותן כקובץ tar לצורך סריקה.
 // ==============================================================================
         stage('Build Images') {
             steps {
+                // שימוש בקונטיינר של דוקר
                 container('docker') {
                     sh '''
-                    # הפעלת שירות דוקר ברקע עבור שלב הבנייה
+                    # הפעלת שירות דוקר ברקע והמתנה שיעלה
                     dockerd &
                     sleep 10
 
                     echo "Building Images..."
+                    # בניית התמונות וסימונן בתגית הייחודית שיצרנו למעלה
                     docker build -t $ECR_REGISTRY/mission-backend:$IMAGE_TAG ./Backend
                     docker build -t $ECR_REGISTRY/mission-frontend:$IMAGE_TAG ./Frontend
                     docker build -t $ECR_REGISTRY/mission-worker:$IMAGE_TAG ./Worker
 
                     echo "Saving images to tar files for Trivy scan..."
+                    # שמירת התמונות לקבצים כדי להעביר אותן לשלב הסריקה (Trivy לא יודע לקרוא ישירות מזיכרון הדוקר)
                     docker save $ECR_REGISTRY/mission-backend:$IMAGE_TAG -o backend-image.tar
                     docker save $ECR_REGISTRY/mission-frontend:$IMAGE_TAG -o frontend-image.tar
                     docker save $ECR_REGISTRY/mission-worker:$IMAGE_TAG -o worker-image.tar
@@ -106,10 +122,13 @@ spec:
         }
 
 // ==============================================================================
-// 5. Security Scans (Trivy) - סריקות אבטחה לתמונות
+// 5. סריקות אבטחה (Security Scans - Trivy)
+// שלב זה לוקח את קבצי התמונות (tar) וסורק אותם למציאת חולשות אבטחה קריטיות וגבוהות.
+// אם יימצאו חולשות חמורות, ה-Pipeline ייעצר כאן.
 // ==============================================================================
         stage('Security Scans (Trivy)') {
             steps {
+                // שימוש בקונטיינר של Trivy
                 container('trivy') {
                     sh '''
                     echo "Scanning Backend Image..."
@@ -126,27 +145,32 @@ spec:
         }
 
 // ==============================================================================
-// 6. Push to ECR - העלאת התמונות לענן
+// 6. העלאת התמונות לענן (Push to ECR)
+// לאחר שהתמונות נבנו ועברו סריקה, שלב זה מתחבר ל-AWS ומעלה אותן למאגר ה-ECR שלך.
 // ==============================================================================
         stage('Push to ECR') {
             steps {
                 container('docker') {
+                    // משיכת הרשאות מאובטחות להתחברות ל-AWS מתוך המערכת של Jenkins
                     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
                         sh '''
-                        # הפעלת שירות דוקר מחדש לשלב ההעלאה
+                        # הפעלת שירות דוקר מחדש (הוא נופל בין השלבים)
                         dockerd &
                         sleep 10
 
                         echo "Loading scanned images..."
+                        # טעינת התמונות מקבצי ה-tar חזרה לזיכרון הדוקר
                         docker load -i backend-image.tar
                         docker load -i frontend-image.tar
                         docker load -i worker-image.tar
 
                         echo "Authenticating with AWS ECR..."
+                        # התחברות ל-ECR באמצעות ה-AWS CLI והכנסת הסיסמה לדוקר
                         apk add --no-cache aws-cli
                         aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
 
                         echo "Pushing images to ECR..."
+                        # דחיפת התמונות לענן
                         docker push $ECR_REGISTRY/mission-backend:$IMAGE_TAG
                         docker push $ECR_REGISTRY/mission-frontend:$IMAGE_TAG
                         docker push $ECR_REGISTRY/mission-worker:$IMAGE_TAG
@@ -157,16 +181,21 @@ spec:
         }
 
 // ==============================================================================
-// 7. Publish & Trigger CD - העברת שרביט לפריסה
+// 7. פרסום והפעלת ה-CD (Publish & Trigger CD)
+// השלב האחרון - שומר את התגית החדשה בקובץ, ומוסר את השרביט ל-Pipeline השני (CD)
+// כדי שיתחיל לפרוס את הגרסה החדשה לקוברנטיס.
 // ==============================================================================
         stage('Publish & Trigger CD') {
             steps {
+                // כתיבת התגית לקובץ טקסט למקרה שנרצה לראות אותה בהיסטוריית הריצות
                 writeFile file: 'image_tag.txt', text: "${IMAGE_TAG}"
                 archiveArtifacts artifacts: 'image_tag.txt'
 
-                build job: 'Application - CD', parameters: [
+                // קריאה אוטומטית ל-Job של ה-CD 
+                // והעברת ה-IMAGE_TAG כפרמטר, כדי שה-CD יידע איזו גרסה למשוך ולפרוס
+                build job: 'Application-CD', parameters: [
                     string(name: 'IMAGE_TAG', value: "${IMAGE_TAG}")
-                ], wait: false
+                ], wait: false // לא מחכים שה-CD יסתיים כדי לסמן את ה-CI כמוצלח
             }
         }
     }
