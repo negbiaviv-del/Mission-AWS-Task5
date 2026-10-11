@@ -106,10 +106,10 @@ spec:
                     sleep 10
 
                     echo "Building Images..."
-                    # בניית התמונות וסימונן בתגית הייחודית שיצרנו למעלה
-                    docker build -t $ECR_REGISTRY/mission-backend:$IMAGE_TAG ./Backend
-                    docker build -t $ECR_REGISTRY/mission-frontend:$IMAGE_TAG ./Frontend
-                    docker build -t $ECR_REGISTRY/mission-worker:$IMAGE_TAG ./Worker
+                    # בניית התמונות וסימונן בתגית הייחודית שיצרנו למעלה כולל תגית ה-Latest
+                    docker build -t $ECR_REGISTRY/mission-backend:$IMAGE_TAG -t $ECR_REGISTRY/mission-backend:latest ./Backend
+                    docker build -t $ECR_REGISTRY/mission-frontend:$IMAGE_TAG -t $ECR_REGISTRY/mission-frontend:latest ./Frontend
+                    docker build -t $ECR_REGISTRY/mission-worker:$IMAGE_TAG -t $ECR_REGISTRY/mission-worker:latest ./Worker
 
                     echo "Saving images to tar files for Trivy scan..."
                     # שמירת התמונות לקבצים כדי להעביר אותן לשלב הסריקה (Trivy לא יודע לקרוא ישירות מזיכרון הדוקר)
@@ -169,11 +169,17 @@ spec:
                         apk add --no-cache aws-cli
                         aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
 
-                        echo "Pushing images to ECR..."
-                        # דחיפת התמונות לענן
+                        echo "Pushing specific version tags..."
+                        # דחיפת התמונות לענן - תגית הגרסה הספציפית
                         docker push $ECR_REGISTRY/mission-backend:$IMAGE_TAG
                         docker push $ECR_REGISTRY/mission-frontend:$IMAGE_TAG
                         docker push $ECR_REGISTRY/mission-worker:$IMAGE_TAG
+
+                        echo "Pushing 'latest' tags for fallback and fresh deployments..."
+                        # דחיפת התמונות לענן - תגית latest להתקנות מאפס (Fresh Deployments)
+                        docker push $ECR_REGISTRY/mission-backend:latest
+                        docker push $ECR_REGISTRY/mission-frontend:latest
+                        docker push $ECR_REGISTRY/mission-worker:latest
                         '''
                     }
                 }
