@@ -69,14 +69,14 @@ spec:
           httpGet:
             path: /
             port: 8080
-          initialDelaySeconds: 5
+          initialDelaySeconds: 15 # השהייה של 15 שניות לפני תחילת הבדיקה
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /
             port: 8080
-          initialDelaySeconds: 3
-          periodSeconds: 5
+          initialDelaySeconds: 15 # השהייה של 15 שניות כנ״ל גם לגבי הבדיקת מוכנות.
+          periodSeconds: 10
 # ==============================================================================
 # 5. הקשחת קונטיינר (Security Context):
 # חסימת הסלמת הרשאות וניקוי יכולות מערכת לינוקס.
