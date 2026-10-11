@@ -112,3 +112,25 @@ kubeControllerManager:
 
 kubeScheduler:
   enabled: false
+
+# ==============================================================================
+# 4. חוקי התראות (Prometheus Rules):
+# הגדרת חוקים מותאמים אישית עם השהיה (for) למניעת התראות שווא בזמן פריסה
+# ==============================================================================
+additionalPrometheusRulesMap:
+  custom-app-rules:
+    groups:
+      - name: application-rules
+        rules:
+          - alert: TargetIsDown
+            # בודק אם השירותים בסביבה שלך
+            # (devops-app)
+            # למטה
+            expr: up{namespace="devops-app"} == 0
+            # הנה מנגנון ההשהיה: מתריע רק אם המצב נמשך 3 דקות ברצף
+            for: 3m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Target is DOWN in namespace devops-app"
+              description: "The service {{ $labels.job }} (instance {{ $labels.instance }}) has been down for more than 3 minutes."
