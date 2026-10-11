@@ -12,18 +12,18 @@
 This project presents an advanced, secure, and distributed cloud architecture using a **3-Tier Architecture** model on **AWS**. The entire system is provisioned and managed utilizing **Infrastructure as Code (IaC)**, **Configuration as Code (CaC)**, and a fully automated **CI/CD pipeline** orchestrated by Jenkins running inside Kubernetes.
 
 ### Architecture Boundaries
-* **CI/CD Cluster (Jenkins):** Jenkins controller runs in a dedicated `jenkins` namespace. It dynamically provisions ephemeral Agent Pods to execute workloads and terminates them upon completion.
-* **Application Cluster:** The 3-tier application runs in the `devops-app` namespace.
-* **AWS Managed Services:** The underlying EKS infrastructure, RDS PostgreSQL, S3, SQS, SNS, ECR, and AWS Secrets Manager.
+- **CI/CD Cluster (Jenkins):** Jenkins controller runs in a dedicated `jenkins` namespace. It dynamically provisions ephemeral Agent Pods to execute workloads and terminates them upon completion.
+- **Application Cluster:** The 3-tier application runs in the `devops-app` namespace.
+- **AWS Managed Services:** The underlying EKS infrastructure, RDS PostgreSQL, S3, SQS, SNS, ECR, and AWS Secrets Manager.
 
 ---
 
 ## 🛠️ Tech Stack & Prerequisites
-* **Cloud & IaC:** AWS, Terraform 1.14.9, Helm
-* **CI/CD:** Jenkins, Jenkins Configuration as Code (JCasC), Job DSL
-* **Containers & Orchestration:** Docker, Kubernetes (Amazon EKS 1.31)
-* **Agent Build Tools:** Docker-in-Docker (DinD) / Kaniko (Rootless building)
-* **Prerequisites to run:** `aws-cli`, `kubectl`, `terraform`, `helm`, and valid AWS credentials.
+- **Cloud & IaC:** AWS, Terraform 1.14.9, Helm
+- **CI/CD:** Jenkins, Jenkins Configuration as Code (JCasC), Job DSL
+- **Containers & Orchestration:** Docker, Kubernetes (Amazon EKS 1.31)
+- **Agent Build Tools:** Docker-in-Docker (DinD) / Kaniko (Rootless building)
+- **Prerequisites to run:** `aws-cli`, `kubectl`, `terraform`, `helm`, and valid AWS credentials.
 
 ---
 
@@ -32,29 +32,29 @@ Following best practices, the pipeline is strictly divided into two separate pro
 
 ### 1. Continuous Integration (`Application - CI`)
 Triggered automatically by a GitHub Webhook upon a push to the repository.
-* **Checkout & Validation:** Fetches code and validates Dockerfiles and manifests.
-* **Linting & Tests:** Runs static code analysis and basic unit tests.
-* **Build & Tag:** Builds Docker images for the Frontend, Backend, and Worker using a dynamic, immutable `IMAGE_TAG` based on the short Git commit SHA (No `:latest` tags).
-* **Push & Publish:** Pushes images securely to AWS ECR and passes the unique `IMAGE_TAG` as a parameter to the CD pipeline.
+- **Checkout & Validation:** Fetches code and validates Dockerfiles and manifests.
+- **Linting & Tests:** Runs static code analysis and basic unit tests.
+- **Build & Tag:** Builds Docker images for the Frontend, Backend, and Worker utilizing a **Double Tagging** strategy. Images are tagged with both a dynamic, immutable `IMAGE_TAG` (based on the short Git commit SHA) for CI/CD tracking, and a `latest` tag for fresh manual deployments.
+- **Push & Publish:** Pushes images securely to AWS ECR and passes the unique `IMAGE_TAG` as a parameter to the CD pipeline.
 
 ### 2. Continuous Deployment (`Application - CD`)
 Triggered downstream by the CI pipeline. **It does not build code.**
-* **Input Validation:** Verifies the received `IMAGE_TAG` exists in the ECR registry.
-* **Manifest Validation:** Runs `helm template` or `kubectl dry-run` to validate K8s syntax.
-* **Deploy:** Updates the Kubernetes Deployments in the `devops-app` namespace using the new image tag.
-* **Verify (Rollout):** Waits for `kubectl rollout status` to complete successfully.
-* **Smoke Test:** Performs a basic HTTP health check against the application's external Ingress, integrated with Prometheus for automated rollbacks.
+- **Input Validation:** Verifies the received `IMAGE_TAG` exists in the ECR registry and explicitly rejects the `latest` tag to enforce declarative versioning.
+- **Manifest Validation:** Updates the Kubernetes Deployments in the `devops-app` namespace dynamically using the injected image tag.
+- **Deploy:** Applies the updated manifests. Kubernetes natively handles the Rolling Update triggered by the new tag (No manual `rollout restart` commands are used).
+- **Verify (Rollout):** Waits for `kubectl rollout status` to complete successfully, ensuring zero-downtime transition before proceeding.
+- **Smoke Test:** Performs a basic HTTP health check against the application's external Ingress, integrated with Prometheus for automated rollbacks.
 
 ---
 
 ## 🔐 Security, RBAC & Secrets Management
 Security is enforced at every layer of the CI/CD and Application lifecycles:
 
-* **Zero-Touch Secrets Management:** Manual `.env` files, terminal prompts, and UI-based Jenkins credentials have been completely eliminated. External Secrets Operator (ESO) dynamically synchronizes the RDS database password, while deployment scripts securely fetch GitHub Personal Access Tokens (PAT) directly from AWS Secrets Manager at runtime. No secrets are ever logged or committed to Git history.
-* **Agent Security (No docker.sock):** Jenkins Agents run as ephemeral Pods. To prevent privilege escalation, the host's `/var/run/docker.sock` is **not** mounted. Image building is isolated using secure rootless mechanisms (BuildKit/DinD). Agents have custom `securityContext` settings with dropped capabilities.
-* **Strict Network Routing (NetworkPolicies):** A `Default Deny` policy is enforced across the `devops-app` namespace. Explicit Egress/Ingress rules are defined. The Jenkins UI is exposed securely via an Ingress with TLS.
-* **Least Privilege RBAC:** The Jenkins Controller has limited permissions. The CD Agent is only granted the exact permissions required to deploy resources to the `devops-app` namespace (no `cluster-admin`).
-* **IRSA:** Pods authenticate to AWS using IAM Roles for Service Accounts, eliminating long-lived access keys.
+- **Zero-Touch Secrets Management:** Manual `.env` files, terminal prompts, and UI-based Jenkins credentials have been completely eliminated. External Secrets Operator (ESO) dynamically synchronizes the RDS database password, while deployment scripts securely fetch GitHub Personal Access Tokens (PAT) directly from AWS Secrets Manager at runtime. No secrets are ever logged or committed to Git history.
+- **Agent Security (No docker.sock):** Jenkins Agents run as ephemeral Pods. To prevent privilege escalation, the host's `/var/run/docker.sock` is **not** mounted. Image building is isolated using secure rootless mechanisms (BuildKit/DinD). Agents have custom `securityContext` settings with dropped capabilities.
+- **Strict Network Routing (NetworkPolicies):** A `Default Deny` policy is enforced across the `devops-app` namespace. Explicit Egress/Ingress rules are defined. The Jenkins UI is exposed securely via an Ingress with TLS.
+- **Least Privilege RBAC:** The Jenkins Controller has limited permissions. The CD Agent is only granted the exact permissions required to deploy resources to the `devops-app` namespace (no `cluster-admin`).
+- **IRSA:** Pods authenticate to AWS using IAM Roles for Service Accounts, eliminating long-lived access keys.
 
 ---
 
@@ -76,7 +76,7 @@ For a complete, automated end-to-end deployment, use the provided master script.
 
 ---
 
-### 🛠️️ Option 2: Step-by-Step Deployment (Manual)
+### 🛠 Option 2: Step-by-Step Deployment (Manual)
 
 If you prefer to deploy each component individually to observe the process, follow these steps in order:
 
@@ -100,12 +100,13 @@ To easily access the Prometheus UI in the background without blocking your termi
     ./open-prometheus.sh &
 
 **Observability Operations & Data Recovery:**
-* **Data Retention:** Prometheus is configured with a **15-day** retention policy.
-* **Storage Consumption:** A **20Gi Persistent Volume Claim (PVC)** utilizing the AWS EBS `gp2` storage class is dedicated to Prometheus.
-* **Disaster Recovery:** The metric data is decoupled from the Pod lifecycle via the PVC. If the Prometheus Pod crashes, Kubernetes will automatically spin up a replacement and reattach the existing EBS volume, ensuring **zero data loss**.
+- **Data Retention:** Prometheus is configured with a **15-day** retention policy.
+- **Storage Consumption:** A **20Gi Persistent Volume Claim (PVC)** utilizing the AWS EBS `gp2` storage class is dedicated to Prometheus.
+- **Disaster Recovery:** The metric data is decoupled from the Pod lifecycle via the PVC. If the Prometheus Pod crashes, Kubernetes will automatically spin up a replacement and reattach the existing EBS volume, ensuring **zero data loss**.
+- **Alert Tuning:** Custom `PrometheusRule` configurations implement a `for: 3m` delay mechanism to intelligently suppress false-positive alerts during rolling update deployments, routing only genuine outages to AWS SNS via Alertmanager.
 
 #### 3. Application Deployment (Baseline)
-Deploy the 3-tier application to the Kubernetes cluster and expose it securely via an AWS LoadBalancer. This automated script sets up the application manifests, configures the Ingress, and provisions the necessary ConfigMaps and Secrets. This establishes the baseline environment before CI/CD automation takes over.
+Deploy the 3-tier application to the Kubernetes cluster and expose it securely via an AWS LoadBalancer. This automated script sets up the application manifests, configures the Ingress, and provisions the necessary ConfigMaps and Secrets. This establishes the baseline environment before CI/CD automation takes over. Probes (`livenessProbe` and `readinessProbe`) are configured with an `initialDelaySeconds` to ensure pods have adequate time to initialize without triggering `CrashLoopBackOff` restarts.
 
     chmod +x deploy-app.sh
     ./deploy-app.sh
@@ -126,17 +127,19 @@ Run the automated deployment script. This script fetches the required AWS secret
 ---
 
 ## ⏪ Failure Handling & Rollback
-* **CI Failures:** If tests or builds fail, the image is not pushed, and the CD pipeline is not triggered.
-* **CD Failures:** If the deployment fails validation, no changes are made to the cluster. If the `kubectl rollout status` fails or the Smoke Test fails, the CD pipeline stops and automatically rolls back.
-* **Rollback Procedure:** To rollback to a previous stable version manually, trigger the `Application - CD` pipeline from the Jenkins UI and provide the previous known-good `IMAGE_TAG` (Git SHA) as the build parameter. The CD pipeline will gracefully re-deploy the older, verified image.
+- **CI Failures:** If tests or builds fail, the image is not pushed, and the CD pipeline is not triggered.
+- **CD Failures:** If the deployment fails validation, no changes are made to the cluster. If the `kubectl rollout status` fails or the Smoke Test fails, the CD pipeline stops and automatically rolls back.
+- **Rollback Procedure:** To rollback to a previous stable version manually, trigger the `Application - CD` pipeline from the Jenkins UI and provide the previous known-good `IMAGE_TAG` (Git SHA) as the build parameter. The CD pipeline will gracefully re-deploy the older, verified image.
 
 ---
 
 ## ⚖️ Trade-offs & Architectural Decisions
 1. **Single EKS Cluster for CI and App:** To optimize cloud costs, both Jenkins and the Application reside in the same EKS cluster, separated securely by Namespaces and strict RBAC policies, rather than maintaining two distinct clusters.
 2. **Dynamic Git SHA Tagging vs Digest:** We chose to use the short Git Commit SHA for Docker image tagging rather than the `sha256` Digest. This provides immediate traceability back to the exact code commit in GitHub for developers, enhancing operability and debuggability.
-3. **Basic Auth vs OIDC:** For demonstration purposes, the Application Ingress is secured using Basic Authentication. In a true enterprise environment, this would be replaced with an OAuth2-Proxy or AWS Cognito integration.
-4. **Automated vs Manual Service Discovery:** Instead of hardcoding targets in Prometheus, we utilized the Prometheus Operator's `ServiceMonitor` CRDs. This allows Prometheus to dynamically discover new pods and services based on Kubernetes labels, ensuring the monitoring stack automatically scales with the application.
+3. **Double Tagging Strategy:** While the CI pipeline pushes the precise `IMAGE_TAG` for CD deployments, it concurrently pushes a `latest` tag. This dual approach ensures automated pipelines function safely while still allowing developers to pull fresh generic images for localized testing or manual baseline installations.
+4. **Rolling Updates vs Rollout Restarts:** The CD pipeline deliberately omits forced `kubectl rollout restart` commands, relying strictly on native Kubernetes Rolling Updates triggered by the declarative `sed` replacement of the specific image tag. This eliminates restart loops and respects the native scheduler.
+5. **Basic Auth vs OIDC:** For demonstration purposes, the Application Ingress is secured using Basic Authentication. In a true enterprise environment, this would be replaced with an OAuth2-Proxy or AWS Cognito integration.
+6. **Automated vs Manual Service Discovery:** Instead of hardcoding targets in Prometheus, we utilized the Prometheus Operator's `ServiceMonitor` CRDs. This allows Prometheus to dynamically discover new pods and services based on Kubernetes labels, ensuring the monitoring stack automatically scales with the application.
 
 ---
 
