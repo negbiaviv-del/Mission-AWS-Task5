@@ -176,52 +176,6 @@ done
 echo "🔑 Extracting Jenkins Admin Password..."
 JENKINS_PASSWORD=$(kubectl exec --namespace jenkins -it svc/jenkins -c jenkins -- /bin/cat /run/secrets/additional/chart-admin-password | tr -d '\r')
 
-# ==============================================================================
-# 5. הגדרת
-# Webhook
-# אוטומטי מול
-# GitHub
-# מה הבלוק עושה: משתמש ב-
-# API
-#של גיט כדי להגדיר
-# Webhook
-# שמצביע לכתובת החדשה של ג'נקינס.
-# למה צריך את זה: זהו המנוע של ה-
-# CI/CD.
-# ה-Webhook
-# אומר לגיט: "בכל פעם שמפתח
-# דוחף קוד חדש למאגר
-# (Push),
-#  תשלח מיד בקשת רשת ל-
-# URL
-# הזה כדי שג'נקינס יתחיל בילד אוטומטית".
-# ==============================================================================
-# שולח בקשת API
-# מאובטחת לשרתים של
-# GitHub
-# כדי ליצור
-# Webhook
-# אוטומטי, שיורה לגיט להודיע לג'נקינס על כל דחיפת קוד חדשה
-# (Push)
-# ולהזניק תהליך אוטומציה.
-echo "===> Automating GitHub Webhook creation..."
-curl -s -X POST -H "Accept: application/vnd.github.v3+json" \
-  -H "Authorization: token $GITHUB_TOKEN" \
-  https://api.github.com/repos/negbiaviv-del/Mission-AWS-Task5/hooks \
-  -d '{
-    "name": "web",
-    "active": true,
-    "events": [
-      "push"
-    ],
-    "config": {
-      "url": "http://'"$JENKINS_URL"':8080/github-webhook/",
-      "content_type": "json",
-      "insecure_ssl": "1"
-    }
-  }'
-echo -e "\n===> GitHub Webhook created successfully!"
-
 # מדפיס למסך סיכום סופי וידידותי למשתמש הכולל את כתובת הגישה החיצונית, שם המשתמש והסיסמה שחולצה, כדי לאפשר כניסה מיידית למערכת.
 echo ""
 echo "======================================================"
