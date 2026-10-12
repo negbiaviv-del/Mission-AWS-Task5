@@ -95,7 +95,7 @@ module "iam" {
 # ==============================================================================
 module "secrets" {
   source = "./modules/secrets"
-  # שם הסוד כפי שיופיע בממשק של אמזון (למשל: aviv-db-password)
+  # שם הסוד כפי שיופיע בממשק של אמזון Secrets Manager
   secret_name = var.secret_name
   # תיאור קצר שיעזור לנו לזהות מה הסוד הזה מכיל
   secret_description = var.secret_description
@@ -237,7 +237,8 @@ resource "kubernetes_config_map" "app_config" {
     DB_USER    = "dbadmin"
     AWS_REGION = "us-east-1"
 
-    # מושך דינמית את הכתובות של משאבי הענן כדי שה-Backend
+    # מושך דינמית את הכתובות של משאבי הענן כדי שה-
+    # Backend
     # ידע לאן לשלוח נתונים
     SQS_QUEUE_URL = aws_sqs_queue.worker_queue.url
     SNS_TOPIC_ARN = module.sns.topic_arn
@@ -272,7 +273,9 @@ resource "aws_security_group_rule" "eks_to_rds" {
 # IRSA - חיבור בין פוד ה-Backend להרשאות AWS
 # ==============================================================================
 resource "aws_iam_policy" "backend_policy" {
-  # יצירת פוליסת IAM המכילה אך ורק את הפעולות שה-Backend
+  # יצירת פוליסת IAM
+  # המכילה אך ורק את הפעולות שה-
+  # Backend
   # חייב לבצע
   name        = "aviv-backend-policy"
   description = "Permissions for Backend Pod"
